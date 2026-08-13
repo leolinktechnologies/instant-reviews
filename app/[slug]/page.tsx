@@ -30,6 +30,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
+  // Guidance Modal States
+  const [showGuidanceModal, setShowGuidanceModal] = useState(false);
+  const [targetRedirectUrl, setTargetRedirectUrl] = useState('');
+
   // 1-3 Stars Feedback States
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
@@ -105,13 +109,12 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  // Helper function to format and force Direct Review Box URL for Mobile & Desktop
+  // Format Direct Review Link
   const getDirectReviewUrl = (rawUrl: string): string => {
     if (!rawUrl) return 'https://google.com';
 
     let trimmed = rawUrl.trim();
 
-    // 1. If Place ID is in URL, convert to search.google.com direct popup
     if (trimmed.includes('placeid=')) {
       const match = trimmed.match(/placeid=([^&]+)/);
       if (match && match[1]) {
@@ -119,7 +122,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
       }
     }
 
-    // 2. If short URL or map link doesn't have writereview, ensure /review or writereview intent
     if (!trimmed.includes('writereview') && !trimmed.includes('/review')) {
       if (trimmed.endsWith('/')) {
         trimmed += 'review';
@@ -153,15 +155,16 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
     setCopiedIndex(index);
 
-    // 2. Get Formatted Direct Review Link
+    // 2. Prepare Target URL & Show Modal
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
+    setTargetRedirectUrl(targetUrl);
+    setShowGuidanceModal(true);
 
-    // 3. Fast Redirect suited for Mobile Browsers & Apps
+    // 3. Auto-redirect after 1.8 seconds (giving time to read guidance)
     setTimeout(() => {
-      // Mobile Safari / Chrome handle window.location.href much better for direct app/popup invocation
       window.location.href = targetUrl;
-    }, 350);
+    }, 1800);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -228,6 +231,40 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pt-8 pb-12 px-4 sm:px-6">
+      
+      {/* 🟢 PROFESSIONAL GUIDANCE MODAL POPUP */}
+      {showGuidanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 transition-all">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center space-y-5 shadow-2xl">
+            <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center text-2xl mx-auto shadow-inner">
+              📋
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-white tracking-tight">
+                Review Copied!
+              </h3>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Opening Google Reviews... Simply <strong className="text-amber-400 font-semibold">tap & hold (long-press)</strong> inside the Google comment box to paste your review.
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = targetRedirectUrl || 'https://google.com';
+                }}
+                className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all text-sm flex items-center justify-center gap-2"
+              >
+                <span>Redirecting Now</span>
+                <span className="animate-pulse">→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative w-full max-w-lg space-y-8 text-center">
         
         {/* Header */}
