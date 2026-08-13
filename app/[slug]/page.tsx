@@ -54,7 +54,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
           setBusinessData(data);
           setNotFound(false);
         } else {
-          // Strictly set Not Found if business doesn't exist in Supabase DB
           setBusinessData(null);
           setNotFound(true);
         }
@@ -91,7 +90,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
         body: JSON.stringify({
           businessName: bName,
           rating: selectedRating,
-          category: cat,
+          category: cat || 'Business',
         }),
       });
 
@@ -181,7 +180,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pt-8 pb-12 px-4 sm:px-6">
-      {/* Container Enlarged to max-w-lg */}
       <div className="relative w-full max-w-lg space-y-8 text-center">
         
         {/* Header */}
