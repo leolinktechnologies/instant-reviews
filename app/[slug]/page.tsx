@@ -1,295 +1,175 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useState, useEffect, use } from 'react';
 
-const getSupabaseClient = () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    console.error("❌ Supabase credentials missing in .env.local!");
-    return null;
-  }
-
-  return createClient(url, key);
-};
-
-export default function ReviewFunnel({
-  params,
-}: {
+interface PageProps {
   params: Promise<{ slug: string }>;
-}) {
+}
+
+export default function BusinessReviewPage({ params }: PageProps) {
+  // Unwrap Next.js dynamic params
   const resolvedParams = use(params);
-  const slug = resolvedParams?.slug;
+  
+  // Convert URL slug (e.g. "apex-coffee-house") into readable text ("Apex Coffee House")
+  const defaultName = resolvedParams?.slug
+    ? decodeURIComponent(resolvedParams.slug).replace(/-/g, ' ')
+    : '';
 
-  const [business, setBusiness] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [envError, setEnvError] = useState(false);
-
-  const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [feedback, setFeedback] = useState('');
-  const [submittedFeedback, setSubmittedFeedback] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [copiedStatus, setCopiedStatus] = useState('');
-
+  const [businessName, setBusinessName] = useState(defaultName);
+  const [category, setCategory] = useState('');
   const [reviews, setReviews] = useState<string[]>([]);
-  const [loadingAi, setLoadingAi] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
+  // Auto-fill business name if slug changes
   useEffect(() => {
-    async function fetchBusinessData() {
-      if (!slug) return;
-
-      const supabase = getSupabaseClient();
-      if (!supabase) {
-        setEnvError(true);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('businesses')
-          .select('*')
-          .eq('slug', slug)
-          .single();
-
-        if (error || !data) {
-          console.error("Supabase Error:", error);
-          setError(true);
-        } else {
-          setBusiness(data);
-        }
-      } catch (err) {
-        console.error("Fetch Exception:", err);
-        setError(true);
-      } fontFinally: {
-        setLoading(false);
-      }
+    if (defaultName) {
+      setBusinessName(defaultName);
     }
+  }, [defaultName]);
 
-    fetchBusinessData();
-  }, [slug]);
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessName.trim()) return;
 
-  const fetchAiReviews = async () => {
-    if (!business) return;
-    setLoadingAi(true);
+    setLoading(true);
+    setReviews([]);
+
     try {
       const res = await fetch('/api/generate-reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: business.business_name,
-          category: business.category,
-        }),
-      });
-      const data = await res.json();
-      setReviews(data.reviews || []);
-    } catch (err) {
-      console.error("AI Fetch Error:", err);
-    } finally {
-      setLoadingAi(false);
-    }
-  };
-
-  const handleStarClick = (star: number) => {
-    setRating(star);
-    setSubmittedFeedback(false);
-    if (star >= 4) {
-      fetchAiReviews();
-    }
-  };
-
-  const handleReviewCopy = (reviewText: string) => {
-    navigator.clipboard.writeText(reviewText);
-    setCopiedStatus("Copied! Opening Google... Just long-press & Paste!");
-
-    setTimeout(() => {
-      window.open(business.google_review_url, '_blank');
-      setCopiedStatus('');
-    }, 1200);
-  };
-
-  const handleFeedbackSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      const res = await fetch('/api/save-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: business.business_name,
-          rating,
-          feedbackText: feedback,
-        }),
+        body: JSON.stringify({ businessName, category }),
       });
 
       const data = await res.json();
-
-      if (res.ok && data.success) {
-        setSubmittedFeedback(true);
+      if (data?.reviews && Array.isArray(data.reviews)) {
+        setReviews(data.reviews);
       } else {
-        alert(`Failed to save feedback: ${data.error || 'Unknown error'}`);
-        console.error("❌ Save Error:", data);
+        setReviews(['❌ Something went wrong. Please try again!']);
       }
     } catch (err) {
-      console.error("Feedback submission failed:", err);
-      alert("Network Error: Could not reach the server.");
+      setReviews(['❌ Failed to connect to server.']);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-500 font-medium animate-pulse">
-          Loading Business Profile...
-        </p>
-      </main>
-    );
-  }
-
-  if (envError) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-2xl shadow-md text-center max-w-md border border-red-200">
-          <h2 className="text-lg font-bold text-red-600 mb-2">⚠️ Missing Environment Variables</h2>
-          <p className="text-xs text-slate-600 mb-4">
-            Next.js ko `.env.local` se Supabase Keys nahi mil rahe hain.
-          </p>
-          <div className="text-left bg-slate-900 text-slate-100 text-xs p-3 rounded-lg overflow-x-auto">
-            <p className="text-emerald-400">// `.env.local` me ye hona zaroori hai:</p>
-            <p>NEXT_PUBLIC_SUPABASE_URL=your_url</p>
-            <p>NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key</p>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (error || !business) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-2xl shadow-md text-center max-w-sm border border-slate-100">
-          <h2 className="text-xl font-bold text-red-500 mb-2">Business Not Found</h2>
-          <p className="text-sm text-slate-500">
-            The review link you opened seems to be invalid or expired.
-          </p>
-        </div>
-      </main>
-    );
-  }
+  const copyToClipboard = (text: string, index: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
 
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 text-center border border-slate-100">
-        
-        {/* Business Header */}
-        <div className="mb-6">
-          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 font-bold text-2xl">
-            {business.business_name.charAt(0)}
+    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8">
+      {/* Background Glow Effects */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 sm:w-96 sm:h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-72 h-72 sm:w-96 sm:h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="relative w-full max-w-lg space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider">
+            ✨ AI Review Generator
           </div>
-          <h1 className="text-xl font-bold text-slate-800">{business.business_name}</h1>
-          <p className="text-xs bg-slate-100 text-slate-600 inline-block px-3 py-1 rounded-full mt-1 font-medium">
-            {business.category}
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent capitalize">
+            {businessName ? businessName : 'Google Review Generator'}
+          </h1>
+          <p className="text-sm sm:text-base text-slate-400">
+            Generate authentic 5-star customer reviews in seconds.
           </p>
         </div>
 
-        {/* Alert Banner */}
-        {copiedStatus && (
-          <div className="mb-4 p-3 bg-emerald-100 text-emerald-800 rounded-xl text-sm font-semibold animate-pulse">
-            {copiedStatus}
+        {/* Input Form Card */}
+        <form
+          onSubmit={handleGenerate}
+          className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4"
+        >
+          <div>
+            <label className="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1.5">
+              Business Name
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Apex Coffee House"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-sm"
+            />
           </div>
-        )}
 
-        {/* Star Rating */}
-        <div className="mb-6">
-          <p className="text-slate-700 font-medium mb-3">How was your experience today?</p>
-          <div className="flex justify-center space-x-2">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <button
-                key={star}
-                type="button"
-                className="text-4xl focus:outline-none transition-transform hover:scale-125"
-                onMouseEnter={() => setHoverRating(star)}
-                onMouseLeave={() => setHoverRating(0)}
-                onClick={() => handleStarClick(star)}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1.5">
+              Category / Industry
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Cafe, Dental Clinic, Gym"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all text-sm"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full mt-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98] text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm sm:text-base"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Crafting Reviews...</span>
+              </>
+            ) : (
+              <>
+                <span>⚡ Generate Reviews</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Generated Reviews Container */}
+        {reviews.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Generated Customer Reviews
+              </span>
+              <span className="text-xs text-indigo-400">Tap review to copy</span>
+            </div>
+
+            {reviews.map((review, idx) => (
+              <div
+                key={idx}
+                onClick={() => copyToClipboard(review, idx)}
+                className="group relative bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl p-4 transition-all duration-200 cursor-pointer active:scale-[0.99] shadow-md"
               >
-                <span className={(hoverRating || rating) >= star ? "text-amber-400" : "text-slate-200"}>
-                  ★
-                </span>
-              </button>
+                <p className="text-sm text-slate-200 leading-relaxed pr-8">
+                  {review}
+                </p>
+
+                {/* Copy Status Badge */}
+                <div className="absolute top-3.5 right-3.5 text-xs font-medium">
+                  {copiedIndex === idx ? (
+                    <span className="text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      ✓ Copied!
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 group-hover:text-slate-300 transition-colors">
+                      📋
+                    </span>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-
-        {/* 1-3 Stars (Private Feedback) */}
-        {rating > 0 && rating <= 3 && !submittedFeedback && (
-          <form onSubmit={handleFeedbackSubmit} className="space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-              We are sorry to hear that. Please let us know how we can improve.
-            </div>
-            <textarea
-              required
-              rows={3}
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Tell us what went wrong..."
-              className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
-            />
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-slate-800 text-white py-3 rounded-xl font-medium text-sm hover:bg-slate-900 transition disabled:opacity-50"
-            >
-              {submitting ? "Sending..." : "Submit Private Feedback"}
-            </button>
-          </form>
         )}
-
-        {/* Thank You State for 1-3 Stars */}
-        {submittedFeedback && (
-          <div className="p-4 bg-blue-50 rounded-xl text-blue-900 text-sm font-medium">
-            Thank you for helping us improve! Your feedback has been sent directly to management. 🙏
-          </div>
-        )}
-
-        {/* 4-5 Stars (AI Options) */}
-        {rating >= 4 && (
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Tap any review to Copy & Post on Google:
-            </p>
-
-            {loadingAi ? (
-              <div className="p-6 text-sm text-blue-600 font-medium animate-pulse">
-                ⚡ Generating AI reviews...
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {reviews.map((rev, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleReviewCopy(rev)}
-                    className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition group flex justify-between items-center"
-                  >
-                    <span className="text-sm text-slate-700 group-hover:text-blue-900 font-medium pr-2">
-                      "{rev}"
-                    </span>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-semibold shrink-0">
-                      Tap & Go ➔
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
       </div>
     </main>
   );
