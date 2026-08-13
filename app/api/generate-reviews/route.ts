@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  // Declare variables outside try block so catch block can access them safely
+  // 1. Declare variables OUTSIDE try block so catch block can see them
   let businessName = '';
   let category = '';
 
@@ -55,7 +55,6 @@ Rules:
 
     if (!rawText) throw new Error("No response from Gemini");
 
-    // Clean JSON markdown tags if present
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
     const reviews = JSON.parse(cleanedText);
 
@@ -64,7 +63,7 @@ Rules:
   } catch (error: any) {
     console.error("❌ Route Catch Error:", error?.message || error);
     
-    // Now businessName is safely accessible here without TS2304 errors
+    // 2. Line 62 fixed: businessName is safely defined above
     const name = businessName || 'this place';
     return NextResponse.json({
       reviews: [
