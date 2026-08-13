@@ -24,7 +24,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
   } | null>(null);
 
   const [loadingBusiness, setLoadingBusiness] = useState(true);
-  const [rating, setRating] = useState<number>(5);
+  
+  // 🌟 Rating is null initially so no stars are auto-selected
+  const [rating, setRating] = useState<number | null>(null);
 
   // 4-5 Stars States
   const [reviews, setReviews] = useState<string[]>([]);
@@ -36,7 +38,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // 🔍 Step 1: Fetch Business Details from Supabase 'businesses' table using slug
+  // 🔍 Fetch Business Details from Supabase using slug
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) return;
@@ -50,7 +52,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
         if (data && !error) {
           setBusinessData(data);
         } else {
-          // Fallback if slug not found in DB
           const fallbackName = decodeURIComponent(slug).replace(/-/g, ' ');
           setBusinessData({
             business_name: fallbackName,
@@ -68,9 +69,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
     fetchBusiness();
   }, [slug]);
 
-  // 🤖 Step 2: Auto-Generate Reviews when 4 or 5 stars selected
+  // 🤖 Trigger AI Reviews ONLY when customer explicitly clicks 4 or 5 stars
   useEffect(() => {
-    if (rating >= 4 && businessData) {
+    if (rating !== null && rating >= 4 && businessData) {
       generateReviewsAuto(rating, businessData.business_name, businessData.category);
     }
   }, [rating, businessData]);
@@ -105,7 +106,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  // 📋 Step 3: Copy Review & Redirect to Real Google Review URL
+  // 📋 Copy Review & Redirect to Google Review Link
   const handleCopyAndRedirect = (reviewText: string, index: number) => {
     navigator.clipboard.writeText(reviewText);
     setCopiedIndex(index);
@@ -117,10 +118,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }, 600);
   };
 
-  // 💾 Step 4: Submit Private Feedback to Supabase 'feedbacks' table
+  // 💾 Submit Private Feedback for 1-3 Stars
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!feedbackText.trim()) return;
+    if (!feedbackText.trim() || rating === null) return;
 
     setSubmittingFeedback(true);
 
@@ -156,7 +157,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span>Loading Business Details...</span>
+          <span>Loading...</span>
         </div>
       </main>
     );
@@ -182,7 +183,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
         {/* Main Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
-          {/* Star Rating Picker */}
+          {/* Star Rating Picker (Unselected by default) */}
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -196,9 +197,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   className="p-1 transition-transform active:scale-95 focus:outline-none"
                 >
                   <span
-                    className={`text-3xl sm:text-4xl transition-colors ${
-                      star <= rating
-                        ? 'text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]'
+                    className={`text-4xl transition-all duration-200 ${
+                      rating !== null && star <= rating
+                        ? 'text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)] scale-110'
                         : 'text-slate-700 hover:text-slate-500'
                     }`}
                   >
@@ -207,7 +208,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
                 </button>
               ))}
             </div>
-            <p className="text-xs font-medium text-amber-400">
+
+            {/* Helper Text */}
+            <p className="text-xs font-medium text-amber-400 h-4">
+              {rating === null && <span className="text-slate-500">Tap stars to rate</span>}
               {rating === 5 && '⭐⭐⭐⭐⭐ Excellent!'}
               {rating === 4 && '⭐⭐⭐⭐ Very Good!'}
               {rating === 3 && '⭐⭐⭐ Average'}
@@ -217,7 +221,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
           </div>
 
           {/* 🔴 PATH 1: 1-3 STARS (PRIVATE FEEDBACK FORM) */}
-          {rating <= 3 && (
+          {rating !== null && rating <= 3 && (
             <div className="text-left pt-2 border-t border-slate-800 space-y-4">
               {feedbackSubmitted ? (
                 <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-2xl text-center space-y-1">
@@ -254,20 +258,20 @@ export default function BusinessReviewPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* 🟢 PATH 2: 4-5 STARS (LOADING REVIEWS SPINNER) */}
-          {rating >= 4 && loadingReviews && (
+          {/* 🟢 PATH 2: 4-5 STARS (LOADING SPINNER) */}
+          {rating !== null && rating >= 4 && loadingReviews && (
             <div className="pt-2 border-t border-slate-800 flex items-center justify-center gap-2 text-amber-400 text-sm">
               <svg className="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
-              <span>Generating review ideas for you...</span>
+              <span>Crafting review options...</span>
             </div>
           )}
         </div>
 
-        {/* 🟢 4-5 STARS: AI Generated Reviews List (Auto-Pop-up) */}
-        {rating >= 4 && !loadingReviews && reviews.length > 0 && (
+        {/* 🟢 4-5 STARS: AI Generated Reviews List */}
+        {rating !== null && rating >= 4 && !loadingReviews && reviews.length > 0 && (
           <div className="space-y-3 text-left">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
               Tap any review to copy & open Google:
