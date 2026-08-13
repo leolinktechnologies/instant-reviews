@@ -30,10 +30,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  // Guidance Modal States
-  const [showGuidanceModal, setShowGuidanceModal] = useState(false);
-  const [targetRedirectUrl, setTargetRedirectUrl] = useState('');
-
   // 1-3 Stars Feedback States
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
@@ -134,7 +130,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
-    // 1. Copy Review Text
+    // 1. Copy Review Text to Clipboard with Fallback
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(reviewText);
@@ -155,16 +151,14 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
     setCopiedIndex(index);
 
-    // 2. Target URL & Show Popup
+    // 2. Direct Review Link Format
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
-    setTargetRedirectUrl(targetUrl);
-    setShowGuidanceModal(true);
 
-    // 3. Auto Redirect after 2 seconds
+    // 3. Quick delay for smooth UX transition
     setTimeout(() => {
       window.location.href = targetUrl;
-    }, 2000);
+    }, 800);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -231,56 +225,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pt-8 pb-12 px-4 sm:px-6">
-      
-      {/* 🟢 SUPER EASY 3-STEP VISUAL POPUP */}
-      {showGuidanceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 transition-all">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200">
-            
-            {/* Success Badge */}
-            <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-4 py-1.5 rounded-full text-sm font-bold">
-              <span>✓</span>
-              <span>Review Copied!</span>
-            </div>
-
-            {/* Title */}
-            <h3 className="text-xl font-black text-white tracking-tight">
-              Opening Google Reviews...
-            </h3>
-
-            {/* Visual Steps */}
-            <div className="bg-slate-950/60 rounded-2xl p-4 border border-slate-800/80 text-left space-y-3">
-              <div className="flex items-center gap-3">
-                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">1</span>
-                <p className="text-xs text-slate-300 font-medium">Select <strong className="text-amber-400">5 Stars</strong> on Google</p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">2</span>
-                <p className="text-xs text-slate-300 font-medium"><strong className="text-amber-400">Tap & Hold</strong> in the comment box</p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">3</span>
-                <p className="text-xs text-slate-300 font-medium">Tap <strong className="text-amber-400">Paste</strong> and click Post</p>
-              </div>
-            </div>
-
-            {/* Action Button */}
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = targetRedirectUrl || 'https://google.com';
-              }}
-              className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg transition-all text-sm flex items-center justify-center gap-2"
-            >
-              <span>Continue to Google</span>
-              <span>→</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="relative w-full max-w-lg space-y-8 text-center">
         
         {/* Header */}
@@ -403,11 +347,11 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   "{review}"
                 </p>
 
-                {/* Bottom Action Bar */}
+                {/* 🟢 1-LINE IN-PLACE POPUP / STATUS */}
                 <div className="flex items-center justify-end pt-1 border-t border-slate-800/60">
                   {copiedIndex === idx ? (
-                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
-                      ✓ Copied! Opening Google...
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 flex items-center gap-1.5 animate-pulse">
+                      <span>✓ Copied! Opening Google... Tap & hold to Paste</span>
                     </span>
                   ) : (
                     <span className="text-xs font-semibold bg-amber-500/20 text-amber-300 group-hover:bg-amber-500 group-hover:text-slate-950 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
