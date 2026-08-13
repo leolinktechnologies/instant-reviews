@@ -18,13 +18,18 @@ export async function POST(req: Request) {
       });
     }
 
-    const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
-Rules:
-- Under 15 words per review.
-- Sound like real everyday customers (casual, enthusiastic, simple).
-- Include 1 relevant emoji per review.
-- Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
-- Do NOT include markdown codeblocks or extra conversational text.`;
+    const prompt = `Write 3 realistic, enthusiastic, positive Google reviews for "${businessName}" (a ${category}).
+
+CRITICAL INSTRUCTIONS:
+- Length: Each review MUST be between 10 to 22 words long (do NOT make them 2 or 3 words).
+- Diversity: Make all 3 reviews sound completely different from each other:
+  1. Review 1: Focus on friendly customer service or team attitude.
+  2. Review 2: Focus on top-notch quality, atmosphere, or outcome.
+  3. Review 3: Focus on value, overall experience, and recommending to friends.
+- Tone: Natural, enthusiastic, written by real everyday customers.
+- Emoji: Add 1 fitting emoji at the end of each review.
+- Output Format: Return ONLY a valid JSON array of 3 strings. Example:
+["The staff here goes above and beyond every single time. Super friendly experience! 😊", "Top tier quality and amazing atmosphere. Definitely coming back very soon! ⭐", "Honest service and great prices. Highly recommend them to anyone in the area! 👌"]`;
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -36,7 +41,7 @@ Rules:
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
+        temperature: 0.9, // Higher temperature for high variety & creativity
       }),
     });
 
