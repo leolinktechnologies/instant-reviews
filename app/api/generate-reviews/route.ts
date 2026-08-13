@@ -3,8 +3,14 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  // Declare variables outside try block so catch block can safely access them
+  let businessName = '';
+  let category = '';
+
   try {
-    const { businessName, category } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    businessName = body.businessName || '';
+    category = body.category || '';
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -58,7 +64,7 @@ Rules:
   } catch (error: any) {
     console.error("❌ Route Catch Error:", error?.message || error);
     
-    // Dynamic fallback so app never breaks
+    // Now businessName is safely accessible here without TypeScript errors
     const name = businessName || 'this place';
     return NextResponse.json({
       reviews: [
