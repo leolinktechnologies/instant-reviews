@@ -9,16 +9,16 @@ interface PageProps {
 export default function BusinessReviewPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const slug = resolvedParams?.slug || '';
-  
+
   const businessName = slug
     ? decodeURIComponent(slug).replace(/-/g, ' ')
     : 'This Business';
 
-  // 🔴 NOTE: Yahan apna Google Review Link/CID URL daliye (ya backend/Supabase se fetch kar sakte hain)
+  // 🔴 Apne Google Review Direct Link (Place ID / Google Maps write review URL) se replace karein
   const googleReviewUrl = `https://search.google.com/local/writereview?placeid=YOUR_PLACE_ID`;
 
   const [rating, setRating] = useState<number>(5);
-  
+
   // 4-5 Stars States
   const [reviews, setReviews] = useState<string[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
@@ -31,7 +31,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // AI Reviews Generate (For 4-5 Stars)
+  // 4-5 Stars: AI Reviews Generation
   const handleGenerateReviews = async () => {
     setLoadingReviews(true);
     setReviews([]);
@@ -40,10 +40,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
       const res = await fetch('/api/generate-reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          businessName, 
+        body: JSON.stringify({
+          businessName,
           rating,
-          category: businessName
+          category: businessName,
         }),
       });
 
@@ -52,25 +52,23 @@ export default function BusinessReviewPage({ params }: PageProps) {
         setReviews(data.reviews);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error generating reviews:', err);
     } finally {
       setLoadingReviews(false);
     }
   };
 
-  // Copy Review & Redirect to Google Review Link
+  // 4-5 Stars: Copy Review Text & Redirect to Google Review Link
   const handleCopyAndRedirect = (reviewText: string, index: number) => {
-    // Copy to clipboard
     navigator.clipboard.writeText(reviewText);
     setCopiedIndex(index);
 
-    // 1 Second feedback after copying, then redirect to Google
     setTimeout(() => {
       window.open(googleReviewUrl, '_blank');
     }, 800);
   };
 
-  // Submit Private Feedback to Supabase (For 1-3 Stars)
+  // 1-3 Stars: Save Feedback directly
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedbackText.trim()) return;
@@ -94,7 +92,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
         setFeedbackSubmitted(true);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error submitting feedback:', err);
     } finally {
       setSubmittingFeedback(false);
     }
@@ -103,7 +101,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="relative w-full max-w-md space-y-6 text-center">
-        
         {/* Header */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest">
@@ -117,9 +114,8 @@ export default function BusinessReviewPage({ params }: PageProps) {
           </p>
         </div>
 
-        {/* Card Container */}
+        {/* Main Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
-          
           {/* Star Rating Picker */}
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-2">
@@ -129,7 +125,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   type="button"
                   onClick={() => {
                     setRating(star);
-                    setReviews([]); // Reset reviews when rating changes
+                    setReviews([]);
                     setFeedbackSubmitted(false);
                   }}
                   className="p-1 transition-transform active:scale-95 focus:outline-none"
@@ -155,14 +151,14 @@ export default function BusinessReviewPage({ params }: PageProps) {
             </p>
           </div>
 
-          {/* 🔴 PATH A: 1-3 STARS (PRIVATE FEEDBACK FORM) */}
+          {/* 🔴 PATH 1: 1-3 STARS -> FEEDBACK FORM */}
           {rating <= 3 && (
             <div className="text-left pt-2 border-t border-slate-800 space-y-4">
               {feedbackSubmitted ? (
                 <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-2xl text-center space-y-1">
                   <p className="font-bold text-base">Thank you for your feedback! 🙏</p>
                   <p className="text-xs text-slate-300">
-                    We appreciate your response and will use it to improve our service.
+                    We appreciate your input and will use it to improve our service.
                   </p>
                 </div>
               ) : (
@@ -219,7 +215,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* 🟢 PATH B: 4-5 STARS (AI REVIEWS -> GOOGLE REDIRECT) */}
+          {/* 🟢 PATH 2: 4-5 STARS -> AI REVIEWS GENERATOR */}
           {rating >= 4 && (
             <div className="pt-2 border-t border-slate-800">
               <button
@@ -231,10 +227,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
               </button>
             </div>
           )}
-
         </div>
 
-        {/* 4-5 Stars Generated Reviews Output */}
+        {/* AI Generated Reviews List */}
         {rating >= 4 && reviews.length > 0 && (
           <div className="space-y-3 text-left">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
@@ -266,7 +261,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
             ))}
           </div>
         )}
-
       </div>
     </main>
   );
