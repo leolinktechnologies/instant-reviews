@@ -105,15 +105,63 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  const handleCopyAndRedirect = (reviewText: string, index: number) => {
-    navigator.clipboard.writeText(reviewText);
+  // Helper function to format and force Direct Review Box URL for Mobile & Desktop
+  const getDirectReviewUrl = (rawUrl: string): string => {
+    if (!rawUrl) return 'https://google.com';
+
+    let trimmed = rawUrl.trim();
+
+    // 1. If Place ID is in URL, convert to search.google.com direct popup
+    if (trimmed.includes('placeid=')) {
+      const match = trimmed.match(/placeid=([^&]+)/);
+      if (match && match[1]) {
+        return `https://search.google.com/local/writereview?placeid=${match[1]}`;
+      }
+    }
+
+    // 2. If short URL or map link doesn't have writereview, ensure /review or writereview intent
+    if (!trimmed.includes('writereview') && !trimmed.includes('/review')) {
+      if (trimmed.endsWith('/')) {
+        trimmed += 'review';
+      } else if (!trimmed.includes('?')) {
+        trimmed += '/review';
+      }
+    }
+
+    return trimmed;
+  };
+
+  const handleCopyAndRedirect = async (reviewText: string, index: number) => {
+    // 1. Copy Review Text to Clipboard with Fallback
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(reviewText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = reviewText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+    } catch (err) {
+      console.error('Failed to copy review text:', err);
+    }
+
     setCopiedIndex(index);
 
-    const redirectUrl = businessData?.google_review_url || 'https://google.com';
+    // 2. Get Formatted Direct Review Link
+    const rawUrl = businessData?.google_review_url || 'https://google.com';
+    const targetUrl = getDirectReviewUrl(rawUrl);
 
+    // 3. Fast Redirect suited for Mobile Browsers & Apps
     setTimeout(() => {
-      window.open(redirectUrl, '_blank');
-    }, 600);
+      // Mobile Safari / Chrome handle window.location.href much better for direct app/popup invocation
+      window.location.href = targetUrl;
+    }, 350);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
