@@ -134,7 +134,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
-    // 1. Copy Review Text to Clipboard with Fallback
+    // 1. Copy Review Text
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(reviewText);
@@ -155,16 +155,16 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
     setCopiedIndex(index);
 
-    // 2. Prepare Target URL & Show Modal
+    // 2. Target URL & Show Popup
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
     setTargetRedirectUrl(targetUrl);
     setShowGuidanceModal(true);
 
-    // 3. Auto-redirect after 1.8 seconds (giving time to read guidance)
+    // 3. Auto Redirect after 2 seconds
     setTimeout(() => {
       window.location.href = targetUrl;
-    }, 1800);
+    }, 2000);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -212,7 +212,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     );
   }
 
-  // 404 - Business Not Found Screen
+  // 404 Screen
   if (notFound || !businessData) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
@@ -232,35 +232,51 @@ export default function BusinessReviewPage({ params }: PageProps) {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pt-8 pb-12 px-4 sm:px-6">
       
-      {/* 🟢 PROFESSIONAL GUIDANCE MODAL POPUP */}
+      {/* 🟢 SUPER EASY 3-STEP VISUAL POPUP */}
       {showGuidanceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 transition-all">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center space-y-5 shadow-2xl">
-            <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center text-2xl mx-auto shadow-inner">
-              📋
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 transition-all">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200">
             
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-white tracking-tight">
-                Review Copied!
-              </h3>
-              <p className="text-sm text-slate-300 leading-relaxed">
-                Opening Google Reviews... Simply <strong className="text-amber-400 font-semibold">tap & hold (long-press)</strong> inside the Google comment box to paste your review.
-              </p>
+            {/* Success Badge */}
+            <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-4 py-1.5 rounded-full text-sm font-bold">
+              <span>✓</span>
+              <span>Review Copied!</span>
             </div>
 
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = targetRedirectUrl || 'https://google.com';
-                }}
-                className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-bold py-3.5 px-4 rounded-xl shadow-lg transition-all text-sm flex items-center justify-center gap-2"
-              >
-                <span>Redirecting Now</span>
-                <span className="animate-pulse">→</span>
-              </button>
+            {/* Title */}
+            <h3 className="text-xl font-black text-white tracking-tight">
+              Opening Google Reviews...
+            </h3>
+
+            {/* Visual Steps */}
+            <div className="bg-slate-950/60 rounded-2xl p-4 border border-slate-800/80 text-left space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">1</span>
+                <p className="text-xs text-slate-300 font-medium">Select <strong className="text-amber-400">5 Stars</strong> on Google</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">2</span>
+                <p className="text-xs text-slate-300 font-medium"><strong className="text-amber-400">Tap & Hold</strong> in the comment box</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">3</span>
+                <p className="text-xs text-slate-300 font-medium">Tap <strong className="text-amber-400">Paste</strong> and click Post</p>
+              </div>
             </div>
+
+            {/* Action Button */}
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = targetRedirectUrl || 'https://google.com';
+              }}
+              className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg transition-all text-sm flex items-center justify-center gap-2"
+            >
+              <span>Continue to Google</span>
+              <span>→</span>
+            </button>
           </div>
         </div>
       )}
