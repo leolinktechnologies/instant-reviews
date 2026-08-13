@@ -26,33 +26,19 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Updated API to official v1 endpoint with gemini-2.0-flash / gemini-1.5-flash-latest
-    let response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    // New Google Gemini Interactions API Endpoint
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          model: 'gemini-2.5-flash',
+          input: prompt,
         }),
       }
     );
-
-    // Fallback if 1.5 is moved: Try gemini-2.0-flash or latest alias
-    if (!response.ok) {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        }
-      );
-    }
 
     const data = await response.json();
 
@@ -63,9 +49,11 @@ Rules:
       });
     }
 
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    // Interactions API returns 'output' or 'outputs' directly
+    let rawText = data?.output || data?.outputs?.[0]?.text || data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
     if (!rawText) {
-      return NextResponse.json({ reviews: [`❌ Empty response from Gemini`] });
+      return NextResponse.json({ reviews: [`❌ Empty response from Gemini Interactions API`] });
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
