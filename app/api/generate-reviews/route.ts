@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +18,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Initialize the official SDK with your AQ.Ab8... key
-    const ai = new GoogleGenAI({ apiKey });
-
     const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
 Rules:
 - Under 15 words per review.
@@ -30,18 +26,31 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Calling the model via the official SDK
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
+    // Updated model to stable gemini-1.5-flash
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      }
+    );
 
-    const rawText = response.text;
+    const data = await response.json();
 
-    if (!rawText) {
+    if (!response.ok) {
+      const errMsg = data?.error?.message || `HTTP ${response.status} Error`;
       return NextResponse.json({
-        reviews: [`❌ Error: Gemini returned empty content.`]
+        reviews: [`❌ API Error: ${errMsg}`]
       });
+    }
+
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) {
+      return NextResponse.json({ reviews: [`❌ Empty response from Gemini`] });
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -50,9 +59,8 @@ Rules:
     return NextResponse.json({ reviews });
 
   } catch (error: any) {
-    console.error("Gemini SDK Error:", error);
     return NextResponse.json({
-      reviews: [`❌ SDK Error: ${error?.message || 'Failed to generate reviews'}`]
+      reviews: [`❌ System Error: ${error?.message || 'Unknown Error'}`]
     });
   }
 }
