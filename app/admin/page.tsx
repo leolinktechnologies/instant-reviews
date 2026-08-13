@@ -14,21 +14,30 @@ const getSupabaseClient = () => {
 interface Feedback {
   id?: string | number;
   business_name: string;
+  business_slug?: string;
   rating: number;
   feedback_text: string;
   created_at?: string;
 }
 
+interface AnalyticsItem {
+  id?: string | number;
+  business_slug: string;
+  event_type: 'generated' | 'copied_redirect';
+  created_at?: string;
+}
+
 export default function AdminDashboard() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBusiness, setSelectedBusiness] = useState<string>('ALL');
 
   useEffect(() => {
-    fetchFeedbacks();
+    fetchDashboardData();
   }, []);
 
-  const fetchFeedbacks = async () => {
+  const fetchDashboardData = async () => {
     setLoading(true);
     const supabase = getSupabaseClient();
     if (!supabase) {
@@ -37,97 +46,113 @@ export default function AdminDashboard() {
     }
 
     try {
-      const { data, error } = await supabase
+      // Fetch Private Feedbacks
+      const { data: feedbackData, error: feedbackErr } = await supabase
         .from('feedbacks')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Fetch Error:', error);
-      } else if (data) {
-        setFeedbacks(data);
+      if (feedbackErr) {
+        console.error('Feedback Fetch Error:', feedbackErr);
+      } else if (feedbackData) {
+        setFeedbacks(feedbackData);
+      }
+
+      // Fetch Review Analytics
+      const { data: analyticsData, error: analyticsErr } = await supabase
+        .from('review_analytics')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (analyticsErr) {
+        console.error('Analytics Fetch Error:', analyticsErr);
+      } else if (analyticsData) {
+        setAnalytics(analyticsData);
       }
     } catch (err) {
-      console.error('Exception fetching feedbacks:', err);
+      console.error('Exception fetching dashboard data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Get unique business names for filtering
-  const businesses = Array.from(
-    new Set(feedbacks.map((f) => f.business_name).filter(Boolean))
-  );
+  // Extract unique businesses (slug or name)
+  const businessSet = new Set<string>();
+  feedbacks.forEach((f) => {
+    if (f.business_name) businessSet.add(f.business_name);
+  });
+  analytics.forEach((a) => {
+    if (a.business_slug) businessSet.add(a.business_slug);
+  });
+  const businesses = Array.from(businessSet);
 
-  // Filter feedbacks based on dropdown selection
+  // Filter Data
   const filteredFeedbacks =
     selectedBusiness === 'ALL'
       ? feedbacks
-      : feedbacks.filter((f) => f.business_name === selectedBusiness);
+      : feedbacks.filter(
+          (f) =>
+            f.business_name === selectedBusiness ||
+            f.business_slug === selectedBusiness
+        );
 
-  // Stats calculation
-  const totalCount = filteredFeedbacks.length;
-  const avgRating = totalCount
+  const filteredAnalytics =
+    selectedBusiness === 'ALL'
+      ? analytics
+      : analytics.filter((a) => a.business_slug === selectedBusiness);
+
+  // Metrics Calculations
+  const totalFeedbacks = filteredFeedbacks.length;
+
+  const avgRating = totalFeedbacks
     ? (
-        filteredFeedbacks.reduce((acc, f) => acc + f.rating, 0) / totalCount
+        filteredFeedbacks.reduce((acc, f) => acc + f.rating, 0) / totalFeedbacks
       ).toFixed(1)
     : '0.0';
 
+  const totalGenerated = filteredAnalytics.filter(
+    (a) => a.event_type === 'generated'
+  ).length;
+
+  const totalRedirects = filteredAnalytics.filter(
+    (a) => a.event_type === 'copied_redirect'
+  ).length;
+
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 p-4 md:p-8">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/90 p-6 rounded-2xl border border-slate-800 shadow-xl">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              📊 Admin Feedback Dashboard
+              📊 Admin Analytics & Feedback
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Review and manage private feedback submitted by unhappy customers.
+              Track AI review generations, Google redirects, and private customer feedback.
             </p>
           </div>
           
           <button
-            onClick={fetchFeedbacks}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition shadow"
+            onClick={fetchDashboardData}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg active:scale-95"
           >
             🔄 Refresh Data
           </button>
         </div>
 
-        {/* Metrics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
-            <p className="text-xs font-semibold uppercase text-slate-400">Total Feedbacks</p>
-            <p className="text-3xl font-extrabold text-blue-400 mt-2">{totalCount}</p>
-          </div>
-
-          <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
-            <p className="text-xs font-semibold uppercase text-slate-400">Average Rating</p>
-            <p className="text-3xl font-extrabold text-amber-400 mt-2">
-              {avgRating} <span className="text-lg">★</span>
-            </p>
-          </div>
-
-          <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700">
-            <p className="text-xs font-semibold uppercase text-slate-400">Critical 1-Stars</p>
-            <p className="text-3xl font-extrabold text-red-400 mt-2">
-              {filteredFeedbacks.filter((f) => f.rating === 1).length}
-            </p>
-          </div>
-        </div>
-
-        {/* Filter Controls */}
-        {businesses.length > 0 && (
-          <div className="flex items-center gap-3 bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <label className="text-xs font-medium text-slate-300">Filter by Business:</label>
+        {/* Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <label className="text-xs font-semibold text-slate-300 whitespace-nowrap">
+              Filter Business:
+            </label>
             <select
               value={selectedBusiness}
               onChange={(e) => setSelectedBusiness(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500/50 w-full sm:w-64"
             >
-              <option value="ALL">All Businesses ({feedbacks.length})</option>
+              <option value="ALL">All Businesses</option>
               {businesses.map((b, i) => (
                 <option key={i} value={b}>
                   {b}
@@ -135,33 +160,70 @@ export default function AdminDashboard() {
               ))}
             </select>
           </div>
-        )}
 
-        {/* Feedbacks List */}
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-lg">
-          <div className="p-4 border-b border-slate-700 flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-slate-200">Customer Complaints & Suggestions</h2>
+          <span className="text-xs text-slate-400">
+            Showing records for: <span className="text-amber-400 font-medium">{selectedBusiness}</span>
+          </span>
+        </div>
+
+        {/* Metrics Overview Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          
+          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
+            <p className="text-xs font-semibold uppercase text-slate-400">Private Feedbacks</p>
+            <p className="text-3xl font-extrabold text-red-400 mt-2">{totalFeedbacks}</p>
+            <p className="text-[10px] text-slate-500 mt-1">1-3 Star submissions</p>
+          </div>
+
+          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
+            <p className="text-xs font-semibold uppercase text-slate-400">Avg Private Rating</p>
+            <p className="text-3xl font-extrabold text-amber-400 mt-2">
+              {avgRating} <span className="text-xl">★</span>
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1">From private feedback</p>
+          </div>
+
+          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
+            <p className="text-xs font-semibold uppercase text-slate-400">AI Generated</p>
+            <p className="text-3xl font-extrabold text-blue-400 mt-2">{totalGenerated}</p>
+            <p className="text-[10px] text-slate-500 mt-1">4-5 Star review triggers</p>
+          </div>
+
+          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
+            <p className="text-xs font-semibold uppercase text-slate-400">Google Redirects</p>
+            <p className="text-3xl font-extrabold text-emerald-400 mt-2">{totalRedirects}</p>
+            <p className="text-[10px] text-slate-500 mt-1">Review copy & opens</p>
+          </div>
+
+        </div>
+
+        {/* Feedbacks List Section */}
+        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+            <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <span>💬 Private Feedback Submissions</span>
+            </h2>
             <span className="text-xs text-slate-400">
-              Showing {filteredFeedbacks.length} items
+              {filteredFeedbacks.length} items
             </span>
           </div>
 
           {loading ? (
             <div className="p-12 text-center text-slate-400 text-sm animate-pulse">
-              Loading customer feedback...
+              Loading dashboard data...
             </div>
           ) : filteredFeedbacks.length === 0 ? (
             <div className="p-12 text-center text-slate-500 text-sm">
               🎉 No private feedback submissions found!
             </div>
           ) : (
-            <div className="divide-y divide-slate-700/60">
+            <div className="divide-y divide-slate-800/80">
               {filteredFeedbacks.map((item, index) => (
-                <div key={item.id || index} className="p-5 hover:bg-slate-700/30 transition">
+                <div key={item.id || index} className="p-5 hover:bg-slate-800/40 transition">
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-2">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-blue-400 text-sm">
-                        {item.business_name}
+                      <span className="font-semibold text-amber-400 text-sm">
+                        {item.business_name || item.business_slug}
                       </span>
                       <div className="flex text-amber-400 text-xs">
                         {[1, 2, 3, 4, 5].map((star) => (
@@ -172,14 +234,14 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-slate-500">
                       {item.created_at
                         ? new Date(item.created_at).toLocaleString()
                         : 'Recent'}
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 leading-relaxed">
+                  <p className="text-xs text-slate-300 bg-slate-950 p-3.5 rounded-xl border border-slate-800/80 leading-relaxed">
                     "{item.feedback_text}"
                   </p>
                 </div>

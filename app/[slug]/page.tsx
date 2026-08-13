@@ -35,6 +35,21 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
+  // Helper: Analytics Event Logger
+  const logAnalytics = async (eventType: 'generated' | 'copied_redirect') => {
+    if (!slug) return;
+    try {
+      await supabase.from('review_analytics').insert([
+        {
+          business_slug: slug,
+          event_type: eventType,
+        },
+      ]);
+    } catch (err) {
+      console.error('Error logging analytics:', err);
+    }
+  };
+
   // Fetch Business Details strictly from Supabase
   useEffect(() => {
     async function fetchBusiness() {
@@ -97,6 +112,8 @@ export default function BusinessReviewPage({ params }: PageProps) {
       const data = await res.json();
       if (data?.reviews && Array.isArray(data.reviews)) {
         setReviews(data.reviews);
+        // Log "generated" event in analytics
+        await logAnalytics('generated');
       }
     } catch (err) {
       console.error('Error generating reviews:', err);
@@ -130,6 +147,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
+    // Log "copied_redirect" event in analytics
+    logAnalytics('copied_redirect');
+
     // 1. Copy Review Text to Clipboard with Fallback
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -347,7 +367,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   "{review}"
                 </p>
 
-                {/* 🟢 1-LINE IN-PLACE POPUP / STATUS */}
+                {/* Status Indicator */}
                 <div className="flex items-center justify-end pt-1 border-t border-slate-800/60">
                   {copiedIndex === idx ? (
                     <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 flex items-center gap-1.5 animate-pulse">
