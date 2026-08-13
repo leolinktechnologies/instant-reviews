@@ -26,9 +26,9 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Updated model to stable gemini-1.5-flash
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    // Updated API to official v1 endpoint with gemini-2.0-flash / gemini-1.5-flash-latest
+    let response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,6 +38,21 @@ Rules:
         }),
       }
     );
+
+    // Fallback if 1.5 is moved: Try gemini-2.0-flash or latest alias
+    if (!response.ok) {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+    }
 
     const data = await response.json();
 
