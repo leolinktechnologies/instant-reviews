@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  // Declare variables outside try block so catch block can safely access them
+  // Declare variables outside try block so catch block can access them safely
   let businessName = '';
   let category = '';
 
@@ -64,7 +64,7 @@ Rules:
   } catch (error: any) {
     console.error("❌ Route Catch Error:", error?.message || error);
     
-    // Now businessName is safely accessible here without TypeScript errors
+    // Now businessName is safely accessible here without TS2304 errors
     const name = businessName || 'this place';
     return NextResponse.json({
       reviews: [
