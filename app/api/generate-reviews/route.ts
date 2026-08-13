@@ -16,7 +16,8 @@ function getCategoryAngles(category: string): string[] {
       "reliable IT support and smooth execution",
       "professional team, highly skilled and cooperative",
       "value for money services and top-notch quality",
-      "helped scale our business efficiency smoothly"
+      "helped scale our business efficiency smoothly",
+      "attentive project managers and clear reporting"
     ];
   }
 
@@ -25,7 +26,8 @@ function getCategoryAngles(category: string): string[] {
       "delicious taste, fresh quality, and great portion size",
       "quick service, polite staff, and welcoming ambiance",
       "clean, hygienic environment and wonderful vibe",
-      "great value for money and tasty menu options"
+      "great value for money and tasty menu options",
+      "consistent quality every single visit"
     ];
   }
 
@@ -34,7 +36,8 @@ function getCategoryAngles(category: string): string[] {
       "extremely professional and caring staff",
       "clean, hygienic facility and comfortable experience",
       "great attention to detail and personalized care",
-      "punctual appointment timing and great results"
+      "punctual appointment timing and great results",
+      "felt completely at ease throughout the service"
     ];
   }
 
@@ -43,8 +46,33 @@ function getCategoryAngles(category: string): string[] {
     "prompt communication and polite behavior",
     "speed of service and professional team",
     "great quality work and value for money",
-    "attention to detail and smooth overall experience"
+    "attention to detail and smooth overall experience",
+    "exceeded expectations with their prompt support"
   ];
+}
+
+// Length Pattern Randomizer
+function getRandomLengthConfigs() {
+  const configs = [
+    [
+      "Slot 1: Concise & Crisp (12 - 20 words). MINIMUM 10 WORDS MANDATORY.",
+      "Slot 2: Medium & Detailed (25 - 40 words). 2-3 natural sentences.",
+      "Slot 3: Comprehensive & Detailed (45 - 75 words). 4-5 lines describing overall experience & recommendation."
+    ],
+    [
+      "Slot 1: Medium & Natural (25 - 35 words). Focus on specific service experience.",
+      "Slot 2: Extensive & Detailed Story (50 - 80 words). 4-5 lines explaining why they chose them and outcome.",
+      "Slot 3: Quick & Positive (12 - 22 words). MINIMUM 10 WORDS MANDATORY."
+    ],
+    [
+      "Slot 1: Detailed & In-depth (45 - 70 words). Full paragraph with 4+ lines of praise and details.",
+      "Slot 2: Quick & Direct (12 - 20 words). MINIMUM 10 WORDS MANDATORY.",
+      "Slot 3: Medium & Warm (25 - 40 words). Covers team behavior and final results."
+    ]
+  ];
+
+  const randomIndex = Math.floor(Math.random() * configs.length);
+  return configs[randomIndex];
 }
 
 export async function POST(req: Request) {
@@ -56,36 +84,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Groq API Key not configured' }, { status: 500 });
     }
 
+    // Shuffle and pick 3 angles
     const availableAngles = getCategoryAngles(category);
-    const shuffled = availableAngles.sort(() => 0.5 - Math.random());
-    const selectedAngles = shuffled.slice(0, 3).join(", ");
+    const shuffledAngles = [...availableAngles].sort(() => 0.5 - Math.random());
+    const selectedAngles = shuffledAngles.slice(0, 3).join(", ");
 
-    const prompt = `Generate 3 natural, authentic customer Google reviews for "${businessName}" (Business Category: ${category}).
+    // Pick randomized length structure
+    const lengthConfigs = getRandomLengthConfigs();
+
+    // Randomize Writing Tones
+    const tones = [
+      "Tone 1: Friendly, warm and enthusiastic customer.",
+      "Tone 2: Practical, result-driven and direct professional.",
+      "Tone 3: Casual, everyday real person writing from a mobile phone."
+    ].sort(() => 0.5 - Math.random());
+
+    const prompt = `Generate 3 completely unique, natural, and authentic customer Google reviews for "${businessName}" (Business Category: ${category}).
 
 Selected Rating: ${rating} Stars.
-Key Highlights to use: ${selectedAngles}.
+Key Highlights to distribute across reviews: ${selectedAngles}.
 
-CRITICAL CATEGORY CONTEXT RULE:
-- Reviews MUST strictly reflect the services offered by a ${category} business!
-- Example: For IT/Tech/Services, focus on technical skill, communication, support, and results. DO NOT mention "clean place" or "hygiene" for non-physical/office services!
+MANDATORY LENGTH & VARIETY RULES:
+- ABSOLUTE MINIMUM WORD COUNT: NO review can be shorter than 10 words. 3-4 word reviews are STRICTLY FORBIDDEN!
+- Review 1 (${lengthConfigs[0]}): Written with ${tones[0]}
+- Review 2 (${lengthConfigs[1]}): Written with ${tones[1]}
+- Review 3 (${lengthConfigs[2]}): Written with ${tones[2]}
 
-STRICT REVIEW LENGTH & VARIETY FORMAT:
-- Review 1: VERY SHORT (1-2 lines, approx 12-20 words) - Crisp & direct.
-- Review 2: SHORT & SWEET (2 lines, approx 20-30 words) - Natural human feedback.
-- Review 3: LONGER & DETAILED (3-4 lines, approx 45-65 words) - Covers experience, problem solved, and recommendation.
+CATEGORY CONTEXT:
+- Must strictly fit services of a ${category} business.
+- IT/Tech/Agency: Focus on communication, technical execution, deadlines, problem-solving, and ROI.
+- Food/Cafe: Focus on flavor, service speed, cleanliness, and value.
+- Salon/Health: Focus on care, hygiene, professionalism, and comfort.
 
-STYLE:
-- Everyday casual writing. 
-- Sound like 3 different real humans writing from their own perspective.
-- Avoid repetitive template jargon like "delighted to state", "exemplary", or "top-notch endeavor".
+STYLE & VOICE:
+- Real humans writing naturally.
+- Varied sentence structures, different starting words.
+- DO NOT use cliché marketing jargon like "delighted to state", "exemplary endeavor", or "pinnacle of excellence".
 
-Return ONLY a valid raw JSON array of 3 strings. Example: ["Review 1 text", "Review 2 text", "Review 3 text"]`;
+Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: 'You generate authentic, category-accurate customer reviews. Output ONLY a valid JSON array of strings without markdown styling.',
+          content: 'You generate highly authentic, category-accurate customer reviews. Output ONLY a valid JSON array of strings without markdown syntax or conversational intro.',
         },
         {
           role: 'user',
@@ -93,7 +135,7 @@ Return ONLY a valid raw JSON array of 3 strings. Example: ["Review 1 text", "Rev
         },
       ],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.9,
+      temperature: 0.95, // Higher temperature for increased variety
     });
 
     const content = chatCompletion.choices[0]?.message?.content || '[]';
@@ -103,7 +145,18 @@ Return ONLY a valid raw JSON array of 3 strings. Example: ["Review 1 text", "Rev
       .replace(/```/g, '')
       .trim();
 
-    const reviews = JSON.parse(cleanedContent);
+    let reviews: string[] = JSON.parse(cleanedContent);
+
+    // Fallback safety check: ensure all reviews meet minimum word count
+    if (Array.isArray(reviews)) {
+      reviews = reviews.map((rev) => {
+        const words = rev.trim().split(/\s+/);
+        if (words.length < 8) {
+          return `${rev.trim()} Overall a fantastic experience with ${businessName}, highly recommended for their great work!`;
+        }
+        return rev.trim();
+      });
+    }
 
     return NextResponse.json({ reviews });
   } catch (error: any) {
