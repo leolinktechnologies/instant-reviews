@@ -15,13 +15,11 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({
-        reviews: [
-          `❌ ERROR: GEMINI_API_KEY missing in Vercel!`
-        ]
+        reviews: [`❌ GEMINI_API_KEY missing in Vercel!`]
       });
     }
 
-    // Initialize Official Gemini SDK
+    // Initialize the official SDK with your AQ.Ab8... key
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
@@ -32,7 +30,7 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Call model using SDK
+    // Calling the model via the official SDK
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
@@ -52,11 +50,9 @@ Rules:
     return NextResponse.json({ reviews });
 
   } catch (error: any) {
-    console.error("SDK Error:", error);
+    console.error("Gemini SDK Error:", error);
     return NextResponse.json({
-      reviews: [
-        `❌ SDK Error: ${error?.message || 'Gemini call failed'}`
-      ]
+      reviews: [`❌ SDK Error: ${error?.message || 'Failed to generate reviews'}`]
     });
   }
 }
