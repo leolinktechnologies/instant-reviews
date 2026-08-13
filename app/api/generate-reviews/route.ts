@@ -15,36 +15,38 @@ export async function POST(req: Request) {
     }
 
     const angles = [
-      "staff friendliness and welcoming vibe",
-      "speed of service and efficiency",
-      "cleanliness, hygiene, and atmosphere",
-      "value for money and top quality",
-      "attention to detail and care",
-      "overall experience and high recommendation"
+      "friendly staff and clean place",
+      "fast service and polite team",
+      "great work and good prices",
+      "super polite staff and quick visit",
+      "hygienic environment and helpful team",
+      "definitely coming back again"
     ];
 
     const shuffled = angles.sort(() => 0.5 - Math.random());
     const selectedAngles = shuffled.slice(0, 3).join(", ");
 
-    const prompt = `Generate 3 completely unique, natural, and realistic Google customer reviews for a business named "${businessName}" (Category: ${category}).
+    const prompt = `Generate 3 EXTREMELY SHORT, realistic Google reviews for "${businessName}" (${category}).
 
 Selected Rating: ${rating} Stars.
 Focus areas: ${selectedAngles}.
 
-CRITICAL LENGTH & FORMAT RULES:
-- Keep the reviews concise and short! 
-- Randomize the length across the 3 options:
-  * Review 1: Very short (1-2 lines, approx 12-25 words)
-  * Review 2: Medium (2-3 lines, approx 25-40 words)
-  * Review 3: Detailed (3-4 lines max, approx 40-55 words)
-- Sound authentic and natural like real human feedback. Avoid long essay-like paragraphs.
-- Return ONLY a valid JSON array of 3 strings. Example format: ["Review 1 text", "Review 2 text", "Review 3 text"]`;
+STRICT LENGTH & STYLE RULES:
+- Maximum length per review: 10 to 25 words ONLY (1 to 2 lines max).
+- Style: Casual, direct, everyday human writing. Use simple words.
+- NO corporate jargon, NO long introductory sentences, NO repetitive buzzwords like "exemplary", "delighted", or "outstanding".
+- Randomize lengths across options:
+  * Review 1: Very short (1 short sentence, e.g., "Super friendly staff and very clean place. Loved the service!")
+  * Review 2: Medium short (1-2 sentences, e.g., "Quick and smooth visit. The team was super helpful and polite. Highly recommended.")
+  * Review 3: Short & sweet (2 simple sentences, e.g., "Great experience at ${businessName}! Good prices and awesome work.")
+
+Return ONLY a valid raw JSON array of 3 strings. Example: ["Review 1...", "Review 2...", "Review 3..."]`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: 'You are an AI that generates authentic, natural, and concise customer reviews. Return ONLY a valid raw JSON array of strings without markdown syntax.',
+          content: 'You write super short, casual, and authentic human Google reviews. Output ONLY a valid JSON array of strings.',
         },
         {
           role: 'user',
@@ -52,12 +54,11 @@ CRITICAL LENGTH & FORMAT RULES:
         },
       ],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.9,
+      temperature: 0.95, // Extra randomness for varied human style
     });
 
     const content = chatCompletion.choices[0]?.message?.content || '[]';
     
-    // Clean JSON formatting
     const cleanedContent = content
       .replace(/```json/g, '')
       .replace(/```/g, '')
