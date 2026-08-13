@@ -11,10 +11,10 @@ export async function POST(req: Request) {
     if (body?.businessName) businessName = body.businessName;
     if (body?.category) category = body.category;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json({
-        reviews: [`❌ GEMINI_API_KEY missing in Vercel!`]
+        reviews: [`❌ GROQ_API_KEY missing in Vercel!`]
       });
     }
 
@@ -26,51 +26,32 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Try Interactions API first (as requested by Google's error response)
-    let response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({
-          model: 'gemini-flash',
-          input: prompt,
-        }),
-      }
-    );
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      cache: 'no-store',
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      }),
+    });
 
-    let data = await response.json();
-
-    // Fallback to generic flash alias on v1 if Interactions API isn't enabled
-    if (!response.ok) {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        }
-      );
-      data = await response.json();
-    }
+    const data = await response.json();
 
     if (!response.ok) {
       const errMsg = data?.error?.message || `HTTP ${response.status} Error`;
-      return NextResponse.json({ reviews: [`❌ API Error: ${errMsg}`] });
+      return NextResponse.json({
+        reviews: [`❌ Groq API Error: ${errMsg}`]
+      });
     }
 
-    // Handle both Interactions API format and generateContent format
-    const rawText =
-      data?.output ||
-      data?.outputs?.[0]?.text ||
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
+    const rawText = data?.choices?.[0]?.message?.content;
     if (!rawText) {
-      return NextResponse.json({ reviews: [`❌ Empty response from Gemini`] });
+      return NextResponse.json({ reviews: [`❌ Empty response from Groq`] });
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
