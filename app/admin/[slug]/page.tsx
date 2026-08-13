@@ -27,6 +27,72 @@ interface AnalyticsItem {
   created_at?: string;
 }
 
+interface IssueCategory {
+  name: string;
+  terms: string[];
+}
+
+// Industry Category Issue Mappings
+const CATEGORY_ISSUES_MAP: Record<string, IssueCategory[]> = {
+  restaurant: [
+    { name: 'Food Quality', terms: ['food', 'taste', 'raw', 'cold', 'flavour', 'quality', 'dish'] },
+    { name: 'Service Speed', terms: ['slow', 'delay', 'wait', 'time', 'late', 'order'] },
+    { name: 'Cleanliness', terms: ['dirty', 'clean', 'hygiene', 'table', 'fly', 'washroom'] },
+    { name: 'Staff Behaviour', terms: ['staff', 'waiter', 'behavior', 'rude', 'attitude', 'service'] },
+    { name: 'Ambience', terms: ['noise', 'music', 'ac', 'heating', 'crowded', 'seat', 'ambience'] },
+  ],
+  dental: [
+    { name: 'Waiting Time', terms: ['wait', 'delay', 'time', 'late', 'queue', 'waiting'] },
+    { name: 'Treatment Explanation', terms: ['explain', 'treatment', 'doctor', 'clear', 'info', 'understand'] },
+    { name: 'Staff Behaviour', terms: ['staff', 'behavior', 'rude', 'reception', 'nurse', 'attitude'] },
+    { name: 'Appointment Scheduling', terms: ['appointment', 'booking', 'schedule', 'slot', 'reschedule'] },
+    { name: 'Pricing Concern', terms: ['price', 'cost', 'expensive', 'charge', 'bill', 'fee'] },
+  ],
+  salon: [
+    { name: 'Service Quality', terms: ['hair', 'cut', 'nails', 'facial', 'patchy', 'quality', 'style'] },
+    { name: 'Waiting Time', terms: ['wait', 'delay', 'time', 'queue', 'sitting'] },
+    { name: 'Staff Experience', terms: ['stylist', 'staff', 'experience', 'rough', 'behavior', 'attitude'] },
+    { name: 'Pricing', terms: ['price', 'cost', 'expensive', 'charge', 'rate', 'package'] },
+    { name: 'Appointment Availability', terms: ['appointment', 'slot', 'booking', 'busy', 'schedule'] },
+  ],
+  retail: [
+    { name: 'Product Quality', terms: ['product', 'quality', 'damaged', 'defect', 'item', 'size'] },
+    { name: 'Checkout / Billing Speed', terms: ['billing', 'checkout', 'counter', 'queue', 'line', 'slow'] },
+    { name: 'Staff Behaviour', terms: ['staff', 'salesperson', 'rude', 'help', 'attitude', 'behavior'] },
+    { name: 'Stock Availability', terms: ['stock', 'available', 'out of stock', 'item', 'size'] },
+    { name: 'Return & Exchange', terms: ['return', 'exchange', 'refund', 'policy', 'bill'] },
+  ],
+  default: [
+    { name: 'Service Quality', terms: ['quality', 'service', 'poor', 'bad', 'disappointed', 'work'] },
+    { name: 'Response / Wait Time', terms: ['wait', 'delay', 'time', 'slow', 'late', 'response'] },
+    { name: 'Staff Behaviour', terms: ['staff', 'behavior', 'rude', 'attitude', 'personnel', 'team'] },
+    { name: 'Pricing & Value', terms: ['price', 'cost', 'expensive', 'charge', 'bill', 'rate', 'value'] },
+    { name: 'Overall Experience', terms: ['experience', 'overall', 'issue', 'problem', 'process'] },
+  ],
+};
+
+// Category Resolver Helper
+const getCategoryIssues = (categoryString?: string): IssueCategory[] => {
+  if (!categoryString) return CATEGORY_ISSUES_MAP.default;
+
+  const cat = categoryString.toLowerCase();
+
+  if (cat.includes('food') || cat.includes('restaurant') || cat.includes('cafe') || cat.includes('dining') || cat.includes('bakery')) {
+    return CATEGORY_ISSUES_MAP.restaurant;
+  }
+  if (cat.includes('dental') || cat.includes('clinic') || cat.includes('doctor') || cat.includes('health') || cat.includes('hospital')) {
+    return CATEGORY_ISSUES_MAP.dental;
+  }
+  if (cat.includes('salon') || cat.includes('spa') || cat.includes('beauty') || cat.includes('parlour') || cat.includes('hair')) {
+    return CATEGORY_ISSUES_MAP.salon;
+  }
+  if (cat.includes('retail') || cat.includes('shop') || cat.includes('store') || cat.includes('fashion') || cat.includes('mart')) {
+    return CATEGORY_ISSUES_MAP.retail;
+  }
+
+  return CATEGORY_ISSUES_MAP.default;
+};
+
 export default function DedicatedBusinessAdmin({
   params,
 }: {
@@ -86,7 +152,7 @@ export default function DedicatedBusinessAdmin({
         setFeedbacks(feedbackData || []);
       }
 
-      // 3. Fetch Specific Business Analytics
+      // 3. Fetch Analytics
       const { data: analyticsData, error: analyticsErr } = await supabase
         .from('review_analytics')
         .select('*')
@@ -123,21 +189,18 @@ export default function DedicatedBusinessAdmin({
   const googleAttempts = totalRedirects;
   const privateFeedbackCount = totalFeedbacks;
 
-  // Dynamic / Intelligent Common Issue Tags Extraction
-  const issueKeywords = [
-    { key: 'Waiting time', terms: ['wait', 'delay', 'time', 'late', 'queue'] },
-    { key: 'Staff behaviour', terms: ['staff', 'behavior', 'rude', 'attitude', 'reception'] },
-    { key: 'Appointment scheduling', terms: ['appointment', 'booking', 'schedule', 'slot'] },
-    { key: 'Pricing concern', terms: ['price', 'cost', 'expensive', 'charge', 'bill'] },
-    { key: 'Treatment explanation', terms: ['explain', 'treatment', 'doctor', 'clear', 'info'] },
-  ];
+  // DYNAMIC CATEGORY ISSUE ENGINE
+  const targetCategoryIssues = getCategoryIssues(business?.category);
 
-  const commonIssuesCounts = issueKeywords.map((issue) => {
+  const dynamicCommonIssues = targetCategoryIssues.map((issue) => {
     const count = feedbacks.filter((f) =>
       issue.terms.some((term) => f.feedback_text?.toLowerCase().includes(term))
     ).length;
-    return { name: issue.key, count };
+    return { name: issue.name, count };
   });
+
+  // Most common issue detected
+  const topIssue = [...dynamicCommonIssues].sort((a, b) => b.count - a.count)[0];
 
   if (loading) {
     return (
@@ -147,7 +210,7 @@ export default function DedicatedBusinessAdmin({
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span>Loading Reputation Analytics...</span>
+          <span>Loading Business Analytics...</span>
         </div>
       </main>
     );
@@ -160,7 +223,7 @@ export default function DedicatedBusinessAdmin({
           <div className="text-4xl">⚠️</div>
           <h2 className="text-xl font-bold text-red-400">Business Not Found</h2>
           <p className="text-xs text-slate-400 leading-relaxed">
-            No business matching slug <span className="text-amber-400 font-mono">"{slug}"</span> exists in database.
+            No business matching slug <span className="text-amber-400 font-mono">"{slug}"</span> exists.
           </p>
         </div>
       </main>
@@ -171,11 +234,11 @@ export default function DedicatedBusinessAdmin({
     <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 selection:bg-amber-500 selection:text-slate-950">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* 1. Header Section */}
+        {/* Header Section */}
         <div className="space-y-6">
           <div className="space-y-1">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-              <span> Your Google Reputation Dashboard</span>
+              <span>Your Google Reputation Dashboard</span>
             </h1>
             <p className="text-xs sm:text-sm text-slate-400">
               Track reviews, feedback & customer experience in one place.
@@ -220,7 +283,7 @@ export default function DedicatedBusinessAdmin({
           </div>
         </div>
 
-        {/* 2. Top Summary Cards */}
+        {/* Top Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg hover:border-slate-700/80 transition space-y-1">
@@ -263,7 +326,7 @@ export default function DedicatedBusinessAdmin({
 
         </div>
 
-        {/* 3. Last 30 Days Activity Section */}
+        {/* Last 30 Days Activity Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -320,23 +383,31 @@ export default function DedicatedBusinessAdmin({
           </div>
         </div>
 
-        {/* 4. Needed Action Section */}
+        {/* Needed Action Section - Dynamic Industry Categories */}
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <span>⚡ Needed Action</span>
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <span>⚡ Needed Action</span>
+            </h2>
+            <span className="text-[11px] bg-slate-800/80 text-amber-300 border border-slate-700/80 px-2.5 py-0.5 rounded-full font-medium">
+              Category: <span className="font-semibold text-white capitalize">{business.category || 'General'}</span>
+            </span>
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Left Column: Common Issues */}
+            {/* Left Column: Common Issues (Dynamic per Industry) */}
             <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-800/90 shadow-xl space-y-4">
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Common Issues</h3>
-                <span className="text-xs text-slate-500 font-mono">Reported count</span>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Common Issues</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Customized for {business.category || 'business'}</p>
+                </div>
+                <span className="text-xs text-slate-500 font-mono">Mentions</span>
               </div>
 
               <div className="space-y-2.5">
-                {commonIssuesCounts.map((issue, idx) => (
+                {dynamicCommonIssues.map((issue, idx) => (
                   <div
                     key={idx}
                     className="flex justify-between items-center p-3 rounded-xl bg-slate-950/60 border border-slate-800/60 hover:border-slate-700/80 transition"
@@ -346,7 +417,7 @@ export default function DedicatedBusinessAdmin({
                       {issue.name}
                     </span>
                     <span className="text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-lg">
-                      {issue.count} {issue.count === 1 ? 'case' : 'cases'}
+                      {issue.count} {issue.count === 1 ? 'mention' : 'mentions'}
                     </span>
                   </div>
                 ))}
@@ -362,14 +433,14 @@ export default function DedicatedBusinessAdmin({
                     <span>✨ AI Summarised Issue</span>
                   </h3>
                   <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md font-semibold">
-                    Auto Generated
+                    Category AI
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/60">
                   {feedbacks.length > 0
-                    ? `Based on recent feedback, primary customer friction stems from waiting times and service explanation clarity. Addressing communication during peak hours will prevent negative online ratings.`
-                    : `No negative complaints detected in recent traffic. Overall sentiment remains high with minimal friction.`}
+                    ? `Based on recent feedback for ${business.business_name} (${business.category || 'business'}), primary customer friction stems from '${topIssue.name}'. Addressing this specific area will prevent future negative online ratings.`
+                    : `No negative complaints detected in recent traffic for ${business.business_name}. Overall sentiment remains strong with minimal friction.`}
                 </p>
               </div>
 
@@ -380,8 +451,8 @@ export default function DedicatedBusinessAdmin({
                 </div>
                 <p className="text-xs text-slate-200 leading-relaxed">
                   {feedbacks.length > 0
-                    ? `Brief staff to inform waiting clients about delays proactively and streamline peak scheduling slots.`
-                    : `Encourage satisfied patients/customers to use the positive feedback option to build more 5-star Google reviews.`}
+                    ? `Optimize team workflow around '${topIssue.name}' during peak operational hours to enhance customer satisfaction.`
+                    : `Encourage satisfied clients to use the positive rating flow to systematically gather more 5-star Google reviews.`}
                 </p>
               </div>
 
@@ -390,7 +461,7 @@ export default function DedicatedBusinessAdmin({
           </div>
         </div>
 
-        {/* 5. Feedback List Section with Professional Empty State */}
+        {/* Customer Feedback Stream Section */}
         <div className="bg-slate-900/90 rounded-2xl border border-slate-800/90 overflow-hidden shadow-xl space-y-0">
           <div className="p-4 sm:p-5 border-b border-slate-800 flex justify-between items-center">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
