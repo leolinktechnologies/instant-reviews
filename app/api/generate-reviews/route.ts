@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     if (body?.businessName) businessName = body.businessName;
-    if (body?.category) category = body.category;
+    if (body?.category) category = bodyCategory;
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // Initialize Gemini SDK with your free AQ key
+    // Initialize SDK with your AQ key
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
@@ -30,8 +30,9 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
+    // Using active, stable gemini-2.0-flash model via SDK
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash',
       contents: prompt,
     });
 
