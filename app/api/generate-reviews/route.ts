@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,8 +18,6 @@ export async function POST(req: Request) {
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
-
     const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
 Rules:
 - Under 15 words per review.
@@ -29,16 +26,49 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Updated to active model identifier
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview',
-      contents: prompt,
-    });
+    // Candidate models to try in order
+    const candidateModels = [
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash-latest'
+    ];
 
-    const rawText = response.text;
+    let lastErrorMessage = '';
+    let rawText = '';
+
+    // Loop through candidate models until one succeeds
+    for (const model of candidateModels) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+            }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (response.ok) {
+          rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (rawText) break; // Success! Exit loop
+        } else {
+          lastErrorMessage = data?.error?.message || `HTTP ${response.status} on ${model}`;
+        }
+      } catch (err: any) {
+        lastErrorMessage = err?.message || 'Network fetch failed';
+      }
+    }
 
     if (!rawText) {
-      return NextResponse.json({ reviews: [`❌ Empty response from Gemini`] });
+      return NextResponse.json({
+        reviews: [`❌ Gemini API Error: ${lastErrorMessage}`]
+      });
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -48,7 +78,7 @@ Rules:
 
   } catch (error: any) {
     return NextResponse.json({
-      reviews: [`❌ SDK Error: ${error?.message || 'Unknown Error'}`]
+      reviews: [`❌ System Error: ${error?.message || 'Unknown Error'}`]
     });
   }
 }
