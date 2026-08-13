@@ -26,16 +26,15 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // New Google Gemini Interactions API Endpoint
+    // Using official active gemini-2.0-flash model
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          model: 'gemini-2.5-flash',
-          input: prompt,
+          contents: [{ parts: [{ text: prompt }] }],
         }),
       }
     );
@@ -49,11 +48,9 @@ Rules:
       });
     }
 
-    // Interactions API returns 'output' or 'outputs' directly
-    let rawText = data?.output || data?.outputs?.[0]?.text || data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) {
-      return NextResponse.json({ reviews: [`❌ Empty response from Gemini Interactions API`] });
+      return NextResponse.json({ reviews: [`❌ Empty response from Gemini`] });
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
