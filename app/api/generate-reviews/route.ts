@@ -31,23 +31,27 @@ export async function POST(req: Request) {
 Selected Rating: ${rating} Stars.
 Focus areas: ${selectedAngles}.
 
-Guidelines:
-- Each review must sound like a real person writing a natural review.
-- Do NOT use identical repetitive phrases.
+CRITICAL LENGTH & FORMAT RULES:
+- Keep the reviews concise and short! 
+- Randomize the length across the 3 options:
+  * Review 1: Very short (1-2 lines, approx 12-25 words)
+  * Review 2: Medium (2-3 lines, approx 25-40 words)
+  * Review 3: Detailed (3-4 lines max, approx 40-55 words)
+- Sound authentic and natural like real human feedback. Avoid long essay-like paragraphs.
 - Return ONLY a valid JSON array of 3 strings. Example format: ["Review 1 text", "Review 2 text", "Review 3 text"]`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: 'You are an AI that generates authentic customer reviews. Return ONLY a valid raw JSON array of strings without markdown syntax.',
+          content: 'You are an AI that generates authentic, natural, and concise customer reviews. Return ONLY a valid raw JSON array of strings without markdown syntax.',
         },
         {
           role: 'user',
           content: prompt,
         },
       ],
-      model: 'llama-3.3-70b-versatile', // Fast & ultra-reliable Groq model
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.9,
     });
 
