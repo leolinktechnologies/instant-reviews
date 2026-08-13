@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, use } from 'react';
+import { useState, useEffect, use } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase Client directly on Frontend
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -31,8 +37,14 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // 4-5 Stars: AI Reviews Generation
-  const handleGenerateReviews = async () => {
+  // 🟢 Auto-Generate Reviews when Star Rating is 4 or 5
+  useEffect(() => {
+    if (rating >= 4) {
+      generateReviewsAuto(rating);
+    }
+  }, [rating]);
+
+  const generateReviewsAuto = async (selectedRating: number) => {
     setLoadingReviews(true);
     setReviews([]);
 
@@ -42,7 +54,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           businessName,
-          rating,
+          rating: selectedRating,
           category: businessName,
         }),
       });
@@ -58,17 +70,17 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  // 4-5 Stars: Copy Review Text & Redirect to Google Review Link
+  // 🟢 4-5 Stars: Copy Review Text & Direct Redirect
   const handleCopyAndRedirect = (reviewText: string, index: number) => {
     navigator.clipboard.writeText(reviewText);
     setCopiedIndex(index);
 
     setTimeout(() => {
       window.open(googleReviewUrl, '_blank');
-    }, 800);
+    }, 600);
   };
 
-  // 1-3 Stars: Save Feedback directly
+  // 🔴 1-3 Stars: Save Private Feedback directly to Supabase
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedbackText.trim()) return;
@@ -76,23 +88,25 @@ export default function BusinessReviewPage({ params }: PageProps) {
     setSubmittingFeedback(true);
 
     try {
-      const res = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessSlug: slug,
+      const { error } = await supabase.from('feedbacks').insert([
+        {
+          business_slug: slug,
           rating,
-          feedbackText,
-          customerName,
-          customerContact,
-        }),
-      });
+          feedback_text: feedbackText,
+          customer_name: customerName || 'Anonymous',
+          customer_contact: customerContact || '',
+        },
+      ]);
 
-      if (res.ok) {
+      if (error) {
+        console.error('Supabase Error:', error);
+        alert('Could not save feedback: ' + error.message);
+      } else {
         setFeedbackSubmitted(true);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error submitting feedback:', err);
+      alert('System Error while saving feedback');
     } finally {
       setSubmittingFeedback(false);
     }
@@ -101,6 +115,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="relative w-full max-w-md space-y-6 text-center">
+        
         {/* Header */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest">
@@ -116,6 +131,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
         {/* Main Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
+          
           {/* Star Rating Picker */}
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-2">
@@ -125,7 +141,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   type="button"
                   onClick={() => {
                     setRating(star);
-                    setReviews([]);
                     setFeedbackSubmitted(false);
                   }}
                   className="p-1 transition-transform active:scale-95 focus:outline-none"
@@ -151,14 +166,14 @@ export default function BusinessReviewPage({ params }: PageProps) {
             </p>
           </div>
 
-          {/* 🔴 PATH 1: 1-3 STARS -> FEEDBACK FORM */}
+          {/* 🔴 PATH 1: 1-3 STARS (PRIVATE FEEDBACK FORM) */}
           {rating <= 3 && (
             <div className="text-left pt-2 border-t border-slate-800 space-y-4">
               {feedbackSubmitted ? (
                 <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-2xl text-center space-y-1">
                   <p className="font-bold text-base">Thank you for your feedback! 🙏</p>
                   <p className="text-xs text-slate-300">
-                    We appreciate your input and will use it to improve our service.
+                    We appreciate your input and will work on improving.
                   </p>
                 </div>
               ) : (
@@ -172,7 +187,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
                       rows={3}
                       value={feedbackText}
                       onChange={(e) => setFeedbackText(e.target.value)}
-                      placeholder="Please tell us what went wrong so we can fix it..."
+                      placeholder="Tell us what went wrong..."
                       className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                     />
                   </div>
@@ -215,22 +230,20 @@ export default function BusinessReviewPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* 🟢 PATH 2: 4-5 STARS -> AI REVIEWS GENERATOR */}
-          {rating >= 4 && (
-            <div className="pt-2 border-t border-slate-800">
-              <button
-                onClick={handleGenerateReviews}
-                disabled={loadingReviews}
-                className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 active:scale-[0.98] text-slate-950 font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-amber-500/20 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 text-base"
-              >
-                {loadingReviews ? 'Generating Ideas...' : '✨ Generate Review Ideas'}
-              </button>
+          {/* 🟢 PATH 2: 4-5 STARS (AUTOMATIC REVIEWS DISPLAY) */}
+          {rating >= 4 && loadingReviews && (
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-center gap-2 text-amber-400 text-sm">
+              <svg className="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <span>Generating review ideas for you...</span>
             </div>
           )}
         </div>
 
-        {/* AI Generated Reviews List */}
-        {rating >= 4 && reviews.length > 0 && (
+        {/* AI Generated Reviews List (Auto Pop-up) */}
+        {rating >= 4 && !loadingReviews && reviews.length > 0 && (
           <div className="space-y-3 text-left">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
               Tap any review to copy & open Google:
@@ -249,7 +262,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
                 <div className="absolute top-4 right-4">
                   {copiedIndex === idx ? (
                     <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
-                      ✓ Copied & Opening Google...
+                      ✓ Copied! Opening Google...
                     </span>
                   ) : (
                     <span className="text-xs bg-amber-500/20 text-amber-300 group-hover:bg-amber-500 group-hover:text-slate-950 px-2.5 py-1 rounded-lg font-medium transition-colors">
@@ -261,6 +274,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             ))}
           </div>
         )}
+
       </div>
     </main>
   );
