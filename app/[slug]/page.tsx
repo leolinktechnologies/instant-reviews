@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase Client directly on Frontend
+// Initialize Supabase Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -16,13 +16,14 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const slug = resolvedParams?.slug || '';
 
-  const businessName = slug
-    ? decodeURIComponent(slug).replace(/-/g, ' ')
-    : 'This Business';
+  // Business States from Supabase
+  const [businessData, setBusinessData] = useState<{
+    business_name: string;
+    category: string;
+    google_review_url: string;
+  } | null>(null);
 
-  // 🔴 Apne Google Review Direct Link (Place ID / Google Maps write review URL) se replace karein
-  const googleReviewUrl = `https://search.google.com/local/writereview?placeid=YOUR_PLACE_ID`;
-
+  const [loadingBusiness, setLoadingBusiness] = useState(true);
   const [rating, setRating] = useState<number>(5);
 
   // 4-5 Stars States
@@ -32,19 +33,53 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
   // 1-3 Stars Feedback States
   const [feedbackText, setFeedbackText] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerContact, setCustomerContact] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // 🟢 Auto-Generate Reviews when Star Rating is 4 or 5
+  // 🔍 Step 1: Fetch Business Details from Supabase 'businesses' table using slug
   useEffect(() => {
-    if (rating >= 4) {
-      generateReviewsAuto(rating);
-    }
-  }, [rating]);
+    async function fetchBusiness() {
+      if (!slug) return;
+      try {
+        const { data, error } = await supabase
+          .from('businesses')
+          .select('business_name, category, google_review_url')
+          .eq('slug', slug)
+          .single();
 
-  const generateReviewsAuto = async (selectedRating: number) => {
+        if (data && !error) {
+          setBusinessData(data);
+        } else {
+          // Fallback if slug not found in DB
+          const fallbackName = decodeURIComponent(slug).replace(/-/g, ' ');
+          setBusinessData({
+            business_name: fallbackName,
+            category: 'Business',
+            google_review_url: `https://www.google.com/search?q=${encodeURIComponent(fallbackName)}`,
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching business:', err);
+      } finally {
+        setLoadingBusiness(false);
+      }
+    }
+
+    fetchBusiness();
+  }, [slug]);
+
+  // 🤖 Step 2: Auto-Generate Reviews when 4 or 5 stars selected
+  useEffect(() => {
+    if (rating >= 4 && businessData) {
+      generateReviewsAuto(rating, businessData.business_name, businessData.category);
+    }
+  }, [rating, businessData]);
+
+  const generateReviewsAuto = async (
+    selectedRating: number,
+    bName: string,
+    cat: string
+  ) => {
     setLoadingReviews(true);
     setReviews([]);
 
@@ -53,9 +88,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          businessName,
+          businessName: bName,
           rating: selectedRating,
-          category: businessName,
+          category: cat,
         }),
       });
 
@@ -70,17 +105,19 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  // 🟢 4-5 Stars: Copy Review Text & Direct Redirect
+  // 📋 Step 3: Copy Review & Redirect to Real Google Review URL
   const handleCopyAndRedirect = (reviewText: string, index: number) => {
     navigator.clipboard.writeText(reviewText);
     setCopiedIndex(index);
 
+    const redirectUrl = businessData?.google_review_url || 'https://google.com';
+
     setTimeout(() => {
-      window.open(googleReviewUrl, '_blank');
+      window.open(redirectUrl, '_blank');
     }, 600);
   };
 
-  // 🔴 1-3 Stars: Save Private Feedback directly to Supabase
+  // 💾 Step 4: Submit Private Feedback to Supabase 'feedbacks' table
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedbackText.trim()) return;
@@ -90,16 +127,15 @@ export default function BusinessReviewPage({ params }: PageProps) {
     try {
       const { error } = await supabase.from('feedbacks').insert([
         {
+          business_name: businessData?.business_name || slug,
           business_slug: slug,
           rating,
           feedback_text: feedbackText,
-          customer_name: customerName || 'Anonymous',
-          customer_contact: customerContact || '',
         },
       ]);
 
       if (error) {
-        console.error('Supabase Error:', error);
+        console.error('Supabase Insert Error:', error);
         alert('Could not save feedback: ' + error.message);
       } else {
         setFeedbackSubmitted(true);
@@ -112,10 +148,25 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
+  if (loadingBusiness) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-amber-400">
+          <svg className="animate-spin h-6 w-6 text-amber-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <span>Loading Business Details...</span>
+        </div>
+      </main>
+    );
+  }
+
+  const businessName = businessData?.business_name || 'This Business';
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="relative w-full max-w-md space-y-6 text-center">
-        
         {/* Header */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest">
@@ -131,7 +182,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
         {/* Main Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
-          
           {/* Star Rating Picker */}
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-2">
@@ -192,32 +242,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">
-                      Your Name (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="e.g. Rahul Sharma"
-                      className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">
-                      Phone or Email (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={customerContact}
-                      onChange={(e) => setCustomerContact(e.target.value)}
-                      placeholder="So management can reach out"
-                      className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                    />
-                  </div>
-
                   <button
                     type="submit"
                     disabled={submittingFeedback}
@@ -230,7 +254,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* 🟢 PATH 2: 4-5 STARS (AUTOMATIC REVIEWS DISPLAY) */}
+          {/* 🟢 PATH 2: 4-5 STARS (LOADING REVIEWS SPINNER) */}
           {rating >= 4 && loadingReviews && (
             <div className="pt-2 border-t border-slate-800 flex items-center justify-center gap-2 text-amber-400 text-sm">
               <svg className="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
@@ -242,7 +266,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* AI Generated Reviews List (Auto Pop-up) */}
+        {/* 🟢 4-5 STARS: AI Generated Reviews List (Auto-Pop-up) */}
         {rating >= 4 && !loadingReviews && reviews.length > 0 && (
           <div className="space-y-3 text-left">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
@@ -274,7 +298,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
             ))}
           </div>
         )}
-
       </div>
     </main>
   );
