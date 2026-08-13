@@ -11,10 +11,10 @@ export async function POST(req: Request) {
     if (body?.businessName) businessName = body.businessName;
     if (body?.category) category = body.category;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({
-        reviews: [`❌ GEMINI_API_KEY missing in Vercel!`]
+        reviews: [`❌ OPENAI_API_KEY missing in Vercel!`]
       });
     }
 
@@ -26,31 +26,32 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Using official active gemini-2.0-flash model
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      cache: 'no-store',
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.8,
+      }),
+    });
 
     const data = await response.json();
 
     if (!response.ok) {
       const errMsg = data?.error?.message || `HTTP ${response.status} Error`;
       return NextResponse.json({
-        reviews: [`❌ API Error: ${errMsg}`]
+        reviews: [`❌ OpenAI API Error: ${errMsg}`]
       });
     }
 
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawText = data?.choices?.[0]?.message?.content;
     if (!rawText) {
-      return NextResponse.json({ reviews: [`❌ Empty response from Gemini`] });
+      return NextResponse.json({ reviews: [`❌ Empty response from OpenAI`] });
     }
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
