@@ -3,28 +3,27 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  // 1. Declare variables OUTSIDE try block so catch block can see them
-  let businessName = '';
-  let category = '';
+  let businessName = 'this place';
+  let category = 'Business';
 
   try {
     const body = await req.json().catch(() => ({}));
-    businessName = body.businessName || '';
-    category = body.category || '';
+    if (body?.businessName) businessName = body.businessName;
+    if (body?.category) category = body.category;
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.error("❌ GEMINI_API_KEY missing");
       return NextResponse.json({
         reviews: [
-          `Great experience at ${businessName || 'this place'}! ⭐`,
+          `Great experience at ${businessName}! ⭐`,
           `Very polite staff and quality service! 👍`,
           `Definitely visiting again soon! 😊`
         ]
       });
     }
 
-    const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category || 'Business'} named "${businessName || 'Business'}".
+    const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
 Rules:
 - Under 15 words per review.
 - Sound like real everyday customers (casual, enthusiastic, simple).
@@ -63,12 +62,11 @@ Rules:
   } catch (error: any) {
     console.error("❌ Route Catch Error:", error?.message || error);
     
-    // 2. Line 62 fixed: businessName is safely defined above
-    const name = businessName || 'this place';
+    // No variable used here - impossible for TS to throw TS2304
     return NextResponse.json({
       reviews: [
-        `Really loved the overall service at ${name}! Very polite staff. ⭐`,
-        `Super clean environment and quality work by ${name}. Highly recommended! 👍`,
+        `Really loved the overall service! Very polite staff. ⭐`,
+        `Super clean environment and quality work. Highly recommended! 👍`,
         `Had a wonderful experience here today. Will definitely visit again! 😊`
       ]
     });
