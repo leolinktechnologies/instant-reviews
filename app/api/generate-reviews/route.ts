@@ -19,7 +19,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Initialize SDK with your AQ key
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
@@ -30,9 +29,9 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    // Using active, stable gemini-2.0-flash model via SDK
+    // Updated to active model identifier
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash-preview',
       contents: prompt,
     });
 
