@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
+import Groq from 'groq-sdk';
 
-// Agar aap OpenAI use kar rahe hain:
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY || '',
 });
 
 export async function POST(req: Request) {
   try {
     const { businessName, rating, category } = await req.json();
 
-    // Random topics & keywords to inject randomness on every API call
+    if (!process.env.GROQ_API_KEY) {
+      console.error('GROQ_API_KEY missing in Environment Variables');
+      return NextResponse.json({ error: 'Groq API Key not configured' }, { status: 500 });
+    }
+
     const angles = [
       "staff friendliness and welcoming vibe",
       "speed of service and efficiency",
@@ -21,47 +23,49 @@ export async function POST(req: Request) {
       "overall experience and high recommendation"
     ];
 
-    // Pick 3 random angles every time
     const shuffled = angles.sort(() => 0.5 - Math.random());
     const selectedAngles = shuffled.slice(0, 3).join(", ");
 
     const prompt = `Generate 3 completely unique, natural, and realistic Google customer reviews for a business named "${businessName}" (Category: ${category}).
 
 Selected Rating: ${rating} Stars.
-Focus areas for this request: ${selectedAngles}.
+Focus areas: ${selectedAngles}.
 
 Guidelines:
-- Each review must sound like it was written by a real person (different lengths, sentence structures, and tone).
-- Do NOT use repetitive phrases like "Highly recommend!", "Great place!", or "Amazing experience!" in every review.
-- Mix casual, enthusiastic, and detailed writing styles.
-- Return ONLY a valid JSON array of 3 strings. Example: ["Review 1...", "Review 2...", "Review 3..."]`;
+- Each review must sound like a real person writing a natural review.
+- Do NOT use identical repetitive phrases.
+- Return ONLY a valid JSON array of 3 strings. Example format: ["Review 1 text", "Review 2 text", "Review 3 text"]`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // ya 'gpt-3.5-turbo'
+    const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: 'You are an AI that generates diverse, non-repetitive, authentic customer reviews. Output ONLY a raw JSON array of strings.',
+          content: 'You are an AI that generates authentic customer reviews. Return ONLY a valid raw JSON array of strings without markdown syntax.',
         },
         {
           role: 'user',
           content: prompt,
         },
       ],
-      temperature: 0.9, // 👈 Higher temperature = maximum randomness and variety
+      model: 'llama-3.3-70b-versatile', // Fast & ultra-reliable Groq model
+      temperature: 0.9,
     });
 
-    const content = response.choices[0]?.message?.content || '[]';
+    const content = chatCompletion.choices[0]?.message?.content || '[]';
     
-    // Clean response in case AI includes markdown wrappers
-    const cleanedContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Clean JSON formatting
+    const cleanedContent = content
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
     const reviews = JSON.parse(cleanedContent);
 
     return NextResponse.json({ reviews });
   } catch (error: any) {
-    console.error('Error generating reviews:', error);
+    console.error('Groq API Error:', error?.message || error);
     return NextResponse.json(
-      { error: 'Failed to generate reviews' },
+      { error: error?.message || 'Failed to generate reviews via Groq' },
       { status: 500 }
     );
   }
