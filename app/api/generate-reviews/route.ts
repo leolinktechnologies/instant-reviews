@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     if (body?.businessName) businessName = body.businessName;
-    if (body?.category) category = bodyCategory;
+    if (body?.category) category = body.category;
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
