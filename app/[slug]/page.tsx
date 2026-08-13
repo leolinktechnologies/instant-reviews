@@ -22,6 +22,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   } | null>(null);
 
   const [loadingBusiness, setLoadingBusiness] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
 
   // 4-5 Stars States
@@ -34,10 +35,14 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Fetch Business Details
+  // Fetch Business Details strictly from Supabase
   useEffect(() => {
     async function fetchBusiness() {
-      if (!slug) return;
+      if (!slug) {
+        setNotFound(true);
+        setLoadingBusiness(false);
+        return;
+      }
       try {
         const { data, error } = await supabase
           .from('businesses')
@@ -47,16 +52,15 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
         if (data && !error) {
           setBusinessData(data);
+          setNotFound(false);
         } else {
-          const fallbackName = decodeURIComponent(slug).replace(/-/g, ' ');
-          setBusinessData({
-            business_name: fallbackName,
-            category: 'Business',
-            google_review_url: `https://www.google.com/search?q=${encodeURIComponent(fallbackName)}`,
-          });
+          // Strictly set Not Found if business doesn't exist in Supabase DB
+          setBusinessData(null);
+          setNotFound(true);
         }
       } catch (err) {
         console.error('Error fetching business:', err);
+        setNotFound(true);
       } finally {
         setLoadingBusiness(false);
       }
@@ -143,6 +147,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
+  // Loading Screen
   if (loadingBusiness) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
@@ -151,20 +156,35 @@ export default function BusinessReviewPage({ params }: PageProps) {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span>Loading...</span>
+          <span>Loading Business...</span>
         </div>
       </main>
     );
   }
 
-  const businessName = businessData?.business_name || 'This Business';
+  // 404 - Business Not Found Screen
+  if (notFound || !businessData) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 max-w-md space-y-4 shadow-2xl">
+          <div className="text-5xl">🔍</div>
+          <h1 className="text-2xl font-bold text-red-400">Business Not Found</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            The business page <span className="text-amber-400 font-mono">/{slug}</span> does not exist in our database. Please check the URL or contact support.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  const businessName = businessData.business_name;
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pt-8 pb-12 px-4 sm:px-6">
       {/* Container Enlarged to max-w-lg */}
       <div className="relative w-full max-w-lg space-y-8 text-center">
         
-        {/* Header (Pushed higher up) */}
+        {/* Header */}
         <div className="space-y-3 pt-2">
           <p className="text-xs sm:text-sm font-semibold text-amber-400 uppercase tracking-widest">
             Rate Your Experience
@@ -180,7 +200,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
         {/* Main Rating Card */}
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-7 shadow-2xl space-y-7">
           
-          {/* Star Picker (Enlarged) */}
+          {/* Star Picker */}
           <div className="space-y-3">
             <div className="flex items-center justify-center gap-3">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -266,7 +286,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* 🟢 4-5 STARS REVIEWS LIST (Overlay issue fixed) */}
+        {/* 🟢 4-5 STARS REVIEWS LIST */}
         {rating !== null && rating >= 4 && !loadingReviews && reviews.length > 0 && (
           <div className="space-y-4 text-left">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
@@ -284,7 +304,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   "{review}"
                 </p>
 
-                {/* Bottom Action Bar (No Overlay) */}
+                {/* Bottom Action Bar */}
                 <div className="flex items-center justify-end pt-1 border-t border-slate-800/60">
                   {copiedIndex === idx ? (
                     <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
