@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,15 +14,15 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("❌ GEMINI_API_KEY missing");
       return NextResponse.json({
         reviews: [
-          `Great experience at ${businessName}! ⭐`,
-          `Very polite staff and quality service! 👍`,
-          `Definitely visiting again soon! 😊`
+          `❌ ERROR: GEMINI_API_KEY missing in Vercel!`
         ]
       });
     }
+
+    // Initialize Official Gemini SDK
+    const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Generate 3 completely unique, short 1-line Google reviews for a ${category} named "${businessName}".
 Rules:
@@ -31,28 +32,19 @@ Rules:
 - Return strictly a valid JSON array of 3 strings, e.g.: ["Review 1...", "Review 2...", "Review 3..."]
 - Do NOT include markdown codeblocks or extra conversational text.`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    // Call model using SDK
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      console.error("Gemini HTTP Error:", errData);
-      throw new Error(errData?.error?.message || "Gemini API failed");
+    const rawText = response.text;
+
+    if (!rawText) {
+      return NextResponse.json({
+        reviews: [`❌ Error: Gemini returned empty content.`]
+      });
     }
-
-    const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!rawText) throw new Error("No response from Gemini");
 
     const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
     const reviews = JSON.parse(cleanedText);
@@ -60,14 +52,10 @@ Rules:
     return NextResponse.json({ reviews });
 
   } catch (error: any) {
-    console.error("❌ Route Catch Error:", error?.message || error);
-    
-    // No variable used here - impossible for TS to throw TS2304
+    console.error("SDK Error:", error);
     return NextResponse.json({
       reviews: [
-        `Really loved the overall service! Very polite staff. ⭐`,
-        `Super clean environment and quality work. Highly recommended! 👍`,
-        `Had a wonderful experience here today. Will definitely visit again! 😊`
+        `❌ SDK Error: ${error?.message || 'Gemini call failed'}`
       ]
     });
   }
