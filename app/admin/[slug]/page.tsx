@@ -296,7 +296,7 @@ export default function DedicatedBusinessAdmin({
     );
   }
 
-  // 🔓 AUTHENTICATED DASHBOARD
+  // 🔓 AUTHENTICATED DASHBOARD METRICS
   const totalFeedbacks = feedbacks.length;
 
   const customerRatings = analytics
@@ -312,9 +312,17 @@ export default function DedicatedBusinessAdmin({
 
   const totalGenerated = analytics.filter((a) => a.event_type === 'generated').length;
   const totalRedirects = analytics.filter((a) => a.event_type === 'copied_redirect').length;
+  
+  // Real DB Analytics Event Counts
+  const dbVisitedCount = analytics.filter((a) => a.event_type === 'visited').length;
+  const dbRatedCount = analytics.filter((a) => a.event_type === 'rated').length;
 
-  const totalVisitors = Math.max(analytics.length * 3 + totalFeedbacks * 2, 12);
-  const ratingsSelected = Math.max(totalRatingCount, 8);
+  // Actual Dynamic Visitor Calculation (Checks Database first, falls back smoothly to real interactions)
+  const totalVisitors = dbVisitedCount > 0 
+    ? dbVisitedCount 
+    : Math.max(analytics.length, totalFeedbacks);
+
+  const ratingsSelected = dbRatedCount > 0 ? dbRatedCount : totalRatingCount;
   const reviewsGenerated = totalGenerated;
   const reviewsCopied = totalRedirects;
   const googleAttempts = totalRedirects;
@@ -330,7 +338,7 @@ export default function DedicatedBusinessAdmin({
     return { name: issue.name, count };
   });
 
-  // Filter themes that actually have mentions (>0) for AI Customer Insights Section
+  // Filter themes that actually have mentions (>0)
   const activeFeedbackThemes = dynamicCommonIssues.filter((item) => item.count > 0);
 
   const topIssue = [...dynamicCommonIssues].sort((a, b) => b.count - a.count)[0];
