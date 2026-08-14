@@ -35,14 +35,18 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Analytics Event Logger
-  const logAnalytics = async (eventType: 'generated' | 'copied_redirect') => {
+  // Helper: Analytics Event Logger (UPDATED to log rating integer value)
+  const logAnalytics = async (
+    eventType: 'rated' | 'generated' | 'copied_redirect',
+    ratingVal?: number | null
+  ) => {
     if (!slug) return;
     try {
       await supabase.from('review_analytics').insert([
         {
           business_slug: slug,
           event_type: eventType,
+          rating: ratingVal ?? rating, // Ensures actual star number (1 to 5) is saved
         },
       ]);
     } catch (err) {
@@ -112,8 +116,8 @@ export default function BusinessReviewPage({ params }: PageProps) {
       const data = await res.json();
       if (data?.reviews && Array.isArray(data.reviews)) {
         setReviews(data.reviews);
-        // Log "generated" event in analytics
-        await logAnalytics('generated');
+        // Log "generated" event with rating value
+        await logAnalytics('generated', selectedRating);
       }
     } catch (err) {
       console.error('Error generating reviews:', err);
@@ -147,8 +151,8 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
-    // Log "copied_redirect" event in analytics
-    logAnalytics('copied_redirect');
+    // Log "copied_redirect" event with rating value
+    logAnalytics('copied_redirect', rating);
 
     // 1. Copy Review Text to Clipboard with Fallback
     try {
@@ -273,6 +277,8 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   onClick={() => {
                     setRating(star);
                     setFeedbackSubmitted(false);
+                    // Logs the exact star rating immediately into review_analytics
+                    logAnalytics('rated', star);
                   }}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"
                 >
