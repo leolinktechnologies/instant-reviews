@@ -71,7 +71,6 @@ const CATEGORY_ISSUES_MAP: Record<string, IssueCategory[]> = {
   ],
 };
 
-// Category Resolver Helper
 const getCategoryIssues = (categoryString?: string): IssueCategory[] => {
   if (!categoryString) return CATEGORY_ISSUES_MAP.default;
 
@@ -123,7 +122,6 @@ export default function DedicatedBusinessAdmin({
     }
 
     try {
-      // 1. Fetch Business Details using slug
       const { data: businessData, error: bizError } = await supabase
         .from('businesses')
         .select('*')
@@ -139,7 +137,6 @@ export default function DedicatedBusinessAdmin({
 
       setBusiness(businessData);
 
-      // 2. Fetch Private Feedbacks
       const { data: feedbackData, error: fbError } = await supabase
         .from('feedbacks')
         .select('*')
@@ -152,7 +149,6 @@ export default function DedicatedBusinessAdmin({
         setFeedbacks(feedbackData || []);
       }
 
-      // 3. Fetch Analytics
       const { data: analyticsData, error: analyticsErr } = await supabase
         .from('review_analytics')
         .select('*')
@@ -172,7 +168,6 @@ export default function DedicatedBusinessAdmin({
     }
   };
 
-  // Top Metrics Calculations
   const totalFeedbacks = feedbacks.length;
   const avgRating = totalFeedbacks
     ? (feedbacks.reduce((acc, f) => acc + f.rating, 0) / totalFeedbacks).toFixed(1)
@@ -181,7 +176,6 @@ export default function DedicatedBusinessAdmin({
   const totalGenerated = analytics.filter((a) => a.event_type === 'generated').length;
   const totalRedirects = analytics.filter((a) => a.event_type === 'copied_redirect').length;
 
-  // 30 Days Activity Breakdown
   const totalVisitors = Math.max(analytics.length * 3 + totalFeedbacks * 2, 12);
   const ratingsSelected = Math.max(analytics.length + totalFeedbacks, 8);
   const reviewsGenerated = totalGenerated;
@@ -189,7 +183,6 @@ export default function DedicatedBusinessAdmin({
   const googleAttempts = totalRedirects;
   const privateFeedbackCount = totalFeedbacks;
 
-  // DYNAMIC CATEGORY ISSUE ENGINE
   const targetCategoryIssues = getCategoryIssues(business?.category);
 
   const dynamicCommonIssues = targetCategoryIssues.map((issue) => {
@@ -199,7 +192,6 @@ export default function DedicatedBusinessAdmin({
     return { name: issue.name, count };
   });
 
-  // Most common issue detected
   const topIssue = [...dynamicCommonIssues].sort((a, b) => b.count - a.count)[0];
 
   if (loading) {
@@ -245,19 +237,14 @@ export default function DedicatedBusinessAdmin({
             </p>
           </div>
 
-          {/* Business Info Banner */}
+          {/* Business Info Banner (Category Badge Removed for Clean Look) */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/80 backdrop-blur-md p-5 sm:p-6 rounded-2xl border border-slate-800/80 shadow-xl">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg">
                 {business.business_name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white capitalize">{business.business_name}</h2>
-                  <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-semibold">
-                    {business.category || 'Business'}
-                  </span>
-                </div>
+                <h2 className="text-lg font-bold text-white capitalize">{business.business_name}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Public Funnel: <span className="text-slate-300 font-mono">/{slug}</span>
                 </p>
@@ -383,25 +370,21 @@ export default function DedicatedBusinessAdmin({
           </div>
         </div>
 
-        {/* Needed Action Section - Dynamic Industry Categories */}
+        {/* Needed Action Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <span>⚡ Needed Action</span>
             </h2>
-            <span className="text-[11px] bg-slate-800/80 text-amber-300 border border-slate-700/80 px-2.5 py-0.5 rounded-full font-medium">
-              Category: <span className="font-semibold text-white capitalize">{business.category || 'General'}</span>
-            </span>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Left Column: Common Issues (Dynamic per Industry) */}
+            {/* Left Column: Common Issues */}
             <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-800/90 shadow-xl space-y-4">
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">Common Issues</h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Customized for {business.category || 'business'}</p>
                 </div>
                 <span className="text-xs text-slate-500 font-mono">Mentions</span>
               </div>
@@ -439,7 +422,7 @@ export default function DedicatedBusinessAdmin({
 
                 <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/60">
                   {feedbacks.length > 0
-                    ? `Based on recent feedback for ${business.business_name} (${business.category || 'business'}), primary customer friction stems from '${topIssue.name}'. Addressing this specific area will prevent future negative online ratings.`
+                    ? `Based on recent feedback for ${business.business_name}, primary customer friction stems from '${topIssue.name}'. Addressing this specific area will prevent future negative online ratings.`
                     : `No negative complaints detected in recent traffic for ${business.business_name}. Overall sentiment remains strong with minimal friction.`}
                 </p>
               </div>
