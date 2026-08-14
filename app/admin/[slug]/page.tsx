@@ -155,7 +155,6 @@ export default function DedicatedBusinessAdmin({
 
       setBusiness(businessData);
 
-      // Fetch private feedbacks separately for private feedback section
       const { data: feedbackData, error: fbError } = await supabase
         .from('feedbacks')
         .select('*')
@@ -168,7 +167,6 @@ export default function DedicatedBusinessAdmin({
         setFeedbacks(feedbackData || []);
       }
 
-      // Fetch review analytics for public funnel rating interactions
       const { data: analyticsData, error: analyticsErr } = await supabase
         .from('review_analytics')
         .select('*')
@@ -194,9 +192,8 @@ export default function DedicatedBusinessAdmin({
 
     if (!business) return;
 
-    // Check credentials against business record
-    const validUsername = business.admin_username || slug; // Default username is slug if not set
-    const validPassword = business.admin_password || 'admin123'; // Default password fallback
+    const validUsername = business.admin_username || slug;
+    const validPassword = business.admin_password || 'admin123';
 
     if (usernameInput.trim() === validUsername && passwordInput.trim() === validPassword) {
       setIsAuthenticated(true);
@@ -241,7 +238,7 @@ export default function DedicatedBusinessAdmin({
     );
   }
 
-  // 🔒 LOGIN SCREEN IF NOT AUTHENTICATED
+  // 🔒 LOGIN SCREEN
   if (!isAuthenticated) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 selection:bg-amber-500 selection:text-slate-950">
@@ -325,6 +322,7 @@ export default function DedicatedBusinessAdmin({
 
   const targetCategoryIssues = getCategoryIssues(business?.category);
 
+  // Common Issues Calculations
   const dynamicCommonIssues = targetCategoryIssues.map((issue) => {
     const count = feedbacks.filter((f) =>
       issue.terms.some((term) => f.feedback_text?.toLowerCase().includes(term))
@@ -332,7 +330,38 @@ export default function DedicatedBusinessAdmin({
     return { name: issue.name, count };
   });
 
+  // Filter themes that actually have mentions (>0) for AI Customer Insights Section
+  const activeFeedbackThemes = dynamicCommonIssues.filter((item) => item.count > 0);
+
   const topIssue = [...dynamicCommonIssues].sort((a, b) => b.count - a.count)[0];
+
+  // Dynamic AI logic generation based on mentions
+  let dynamicAiAnalysis = '';
+  let dynamicSuggestedAction = '';
+
+  if (feedbacks.length === 0) {
+    dynamicAiAnalysis = 'No customer concerns or negative feedback have been recorded recently. Overall customer experience is positive.';
+    dynamicSuggestedAction = 'Encourage happy customers to share their feedback on Google to build more positive reviews.';
+  } else if (topIssue && topIssue.count > 1) {
+    dynamicAiAnalysis = `Multiple customers have mentioned concerns regarding ${topIssue.name}. Paying attention to this area will help improve customer satisfaction.`;
+    dynamicSuggestedAction = `Review customer interactions related to ${topIssue.name.toLowerCase()} and consider minor operational adjustments to avoid further complaints.`;
+  } else if (topIssue && topIssue.count === 1) {
+    dynamicAiAnalysis = `One customer mentioned concerns regarding ${topIssue.name}. Most other areas show minimal friction.`;
+    dynamicSuggestedAction = `Some customers mentioned ${topIssue.name.toLowerCase()}. Consider improving communication and service handling to enhance their experience.`;
+  } else {
+    dynamicAiAnalysis = 'Feedback is generally stable. Some minor notes were shared without a clear recurring pattern.';
+    dynamicSuggestedAction = 'Keep maintaining service quality and monitor future feedback for emerging patterns.';
+  }
+
+  // Sentiment indicator logic
+  const numericAvg = parseFloat(avgRating);
+  let sentimentBadge = { label: '🟢 Mostly Positive', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
+
+  if (totalFeedbacks > 3 || numericAvg < 4.0) {
+    sentimentBadge = { label: '🟡 Needs Attention', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
+  } else if (numericAvg < 3.0) {
+    sentimentBadge = { label: '🔴 Urgent Care Required', color: 'text-red-400 bg-red-500/10 border-red-500/20' };
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 selection:bg-amber-500 selection:text-slate-950">
@@ -526,34 +555,61 @@ export default function DedicatedBusinessAdmin({
               </div>
             </div>
 
-            {/* Right Column: AI Summarised Issue & Suggested Action */}
+            {/* Right Column: AI CUSTOMER INSIGHTS */}
             <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-800/90 shadow-xl space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {/* 1. Header with updated title */}
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <span>✨ AI Summarised Issue</span>
+                    <span>✨ AI CUSTOMER INSIGHTS</span>
                   </h3>
                   <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md font-semibold">
                     Category AI
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/60">
-                  {feedbacks.length > 0
-                    ? `Based on recent feedback for ${business.business_name}, primary customer friction stems from '${topIssue.name}'. Addressing this specific area will prevent future negative online ratings.`
-                    : `No negative complaints detected in recent traffic for ${business.business_name}. Overall sentiment remains strong with minimal friction.`}
-                </p>
+                {/* 2. Customer Sentiment Indicator */}
+                <div className="flex items-center justify-between bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Customer Sentiment</span>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${sentimentBadge.color}`}>
+                    {sentimentBadge.label}
+                  </span>
+                </div>
+
+                {/* 3. Dynamic Analysis & Key Feedback Themes */}
+                <div className="space-y-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/60">
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {dynamicAiAnalysis}
+                  </p>
+
+                  {/* Confidence Level Badge / Text */}
+                  <p className="text-[10px] text-slate-500 font-medium italic">
+                    {feedbacks.length < 5 ? '• Based on limited customer feedback' : '• Based on recent customer feedback trends'}
+                  </p>
+
+                  {/* Key Feedback Themes */}
+                  {activeFeedbackThemes.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Key Feedback Themes:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {activeFeedbackThemes.map((theme, i) => (
+                          <span key={i} className="text-[11px] bg-slate-900 text-slate-300 border border-slate-800 px-2.5 py-1 rounded-md">
+                            {theme.name}: <span className="text-amber-400 font-bold">{theme.count}</span> {theme.count === 1 ? 'mention' : 'mentions'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Highlighted Box: Suggested Action */}
+              {/* 4. AI Recommendations (Suggested Action) */}
               <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 p-4 rounded-xl space-y-2">
                 <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
-                  <span>💡 Suggested Action</span>
+                  <span>💡 AI Recommendations</span>
                 </div>
                 <p className="text-xs text-slate-200 leading-relaxed">
-                  {feedbacks.length > 0
-                    ? `Optimize team workflow around '${topIssue.name}' during peak operational hours to enhance customer satisfaction.`
-                    : `Encourage satisfied clients to use the positive rating flow to systematically gather more 5-star Google reviews.`}
+                  {dynamicSuggestedAction}
                 </p>
               </div>
             </div>
