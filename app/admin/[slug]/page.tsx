@@ -24,6 +24,7 @@ interface AnalyticsItem {
   id?: string | number;
   business_slug: string;
   event_type: 'generated' | 'copied_redirect' | 'visited' | 'rated';
+  rating?: number;
   created_at?: string;
 }
 
@@ -169,15 +170,25 @@ export default function DedicatedBusinessAdmin({
   };
 
   const totalFeedbacks = feedbacks.length;
-  const avgRating = totalFeedbacks
-    ? (feedbacks.reduce((acc, f) => acc + f.rating, 0) / totalFeedbacks).toFixed(1)
-    : '0.0';
+
+  // OVERALL AVERAGE CUSTOMER RATING CALCULATION
+  // Combine all ratings from both analytics (rated events) and private feedback entries
+  const allRatings: number[] = [
+    ...feedbacks.map((f) => Number(f.rating)).filter((r) => !isNaN(r) && r > 0),
+    ...analytics
+      .map((a) => Number(a.rating))
+      .filter((r) => !isNaN(r) && r > 0),
+  ];
+
+  const avgRating = allRatings.length
+    ? (allRatings.reduce((acc, curr) => acc + curr, 0) / allRatings.length).toFixed(1)
+    : '5.0';
 
   const totalGenerated = analytics.filter((a) => a.event_type === 'generated').length;
   const totalRedirects = analytics.filter((a) => a.event_type === 'copied_redirect').length;
 
   const totalVisitors = Math.max(analytics.length * 3 + totalFeedbacks * 2, 12);
-  const ratingsSelected = Math.max(analytics.length + totalFeedbacks, 8);
+  const ratingsSelected = Math.max(allRatings.length, analytics.length + totalFeedbacks, 8);
   const reviewsGenerated = totalGenerated;
   const reviewsCopied = totalRedirects;
   const googleAttempts = totalRedirects;
@@ -237,7 +248,7 @@ export default function DedicatedBusinessAdmin({
             </p>
           </div>
 
-          {/* Business Info Banner (Category Badge Removed for Clean Look) */}
+          {/* Business Info Banner */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/80 backdrop-blur-md p-5 sm:p-6 rounded-2xl border border-slate-800/80 shadow-xl">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg">
@@ -264,7 +275,7 @@ export default function DedicatedBusinessAdmin({
                 onClick={fetchBusinessAndFeedbacks}
                 className="flex-1 sm:flex-initial text-center px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg active:scale-95"
               >
-                🔄 Refresh
+                🔄 Sync Latest Data
               </button>
             </div>
           </div>
@@ -275,22 +286,23 @@ export default function DedicatedBusinessAdmin({
           
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg hover:border-slate-700/80 transition space-y-1">
             <div className="flex justify-between items-center text-slate-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Private Feedbacks</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">PRIVATE FEEDBACK RECEIVED</span>
               <span className="text-red-400 text-base">📩</span>
             </div>
             <p className="text-3xl font-extrabold text-red-400">{totalFeedbacks}</p>
-            <p className="text-[11px] text-slate-500">Unsatisfied customer entries</p>
+            <p className="text-[11px] text-slate-500">Customer concerns shared privately</p>
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg hover:border-slate-700/80 transition space-y-1">
             <div className="flex justify-between items-center text-slate-400">
-              <span className="text-xs font-semibold uppercase tracking-wider">Average Rating</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">AVERAGE CUSTOMER RATING</span>
               <span className="text-amber-400 text-base">⭐</span>
             </div>
             <p className="text-3xl font-extrabold text-amber-400">
               {avgRating} <span className="text-lg">★</span>
             </p>
-            <p className="text-[11px] text-slate-500">From private submissions</p>
+            <p className="text-[11px] text-slate-500">Based on all customer ratings collected</p>
+            <p className="text-[10px] text-slate-600 font-medium">Based on total customer interactions</p>
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg hover:border-slate-700/80 transition space-y-1">
