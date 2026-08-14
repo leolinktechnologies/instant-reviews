@@ -107,6 +107,23 @@ export default function DedicatedBusinessAdmin({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Auth States
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Check login state on mount
+  useEffect(() => {
+    if (slug) {
+      const authKey = `admin_auth_${slug}`;
+      const savedAuth = localStorage.getItem(authKey);
+      if (savedAuth === 'true') {
+        setIsAuthenticated(true);
+      }
+    }
+  }, [slug]);
+
   useEffect(() => {
     fetchBusinessAndFeedbacks();
   }, [slug]);
@@ -171,10 +188,120 @@ export default function DedicatedBusinessAdmin({
     }
   };
 
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    if (!business) return;
+
+    // Check credentials against business record
+    const validUsername = business.admin_username || slug; // Default username is slug if not set
+    const validPassword = business.admin_password || 'admin123'; // Default password fallback
+
+    if (usernameInput.trim() === validUsername && passwordInput.trim() === validPassword) {
+      setIsAuthenticated(true);
+      localStorage.setItem(`admin_auth_${slug}`, 'true');
+    } else {
+      setLoginError('Invalid Username or Password');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem(`admin_auth_${slug}`);
+    setUsernameInput('');
+    setPasswordInput('');
+  };
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-amber-400 font-medium text-base bg-slate-900/80 px-6 py-4 rounded-2xl border border-slate-800 shadow-2xl">
+          <svg className="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <span>Loading Business Analytics...</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !business) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 text-center max-w-md shadow-2xl space-y-3">
+          <div className="text-4xl">⚠️</div>
+          <h2 className="text-xl font-bold text-red-400">Business Not Found</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            No business matching slug <span className="text-amber-400 font-mono">"{slug}"</span> exists.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // 🔒 LOGIN SCREEN IF NOT AUTHENTICATED
+  if (!isAuthenticated) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 selection:bg-amber-500 selection:text-slate-950">
+        <div className="bg-slate-900/90 border border-slate-800 p-8 rounded-3xl w-full max-w-md shadow-2xl space-y-6 backdrop-blur-xl">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold text-2xl flex items-center justify-center mx-auto">
+              🔒
+            </div>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight">Admin Portal Access</h1>
+            <p className="text-xs text-slate-400">
+              Enter login credentials for <span className="text-amber-400 font-semibold">{business.business_name}</span>
+            </p>
+          </div>
+
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {loginError && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs p-3 rounded-xl text-center font-medium">
+                ⚠️ {loginError}
+              </div>
+            )}
+
+            <div className="space-y-1 text-left">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Username</label>
+              <input
+                type="text"
+                required
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                placeholder="Enter Username"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              />
+            </div>
+
+            <div className="space-y-1 text-left">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Password</label>
+              <input
+                type="password"
+                required
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter Password"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-slate-950 font-bold py-3 rounded-xl shadow-lg transition text-sm mt-2"
+            >
+              Login to Dashboard →
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // 🔓 AUTHENTICATED DASHBOARD
   const totalFeedbacks = feedbacks.length;
 
-  // STRICT AVERAGE CUSTOMER RATING CALCULATION
-  // Derived ONLY from public funnel star selections logged in review_analytics (1-5 stars)
   const customerRatings = analytics
     .filter((a) => a.rating !== undefined && a.rating !== null && !isNaN(Number(a.rating)) && Number(a.rating) >= 1 && Number(a.rating) <= 5)
     .map((a) => Number(a.rating));
@@ -207,47 +334,28 @@ export default function DedicatedBusinessAdmin({
 
   const topIssue = [...dynamicCommonIssues].sort((a, b) => b.count - a.count)[0];
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-amber-400 font-medium text-base bg-slate-900/80 px-6 py-4 rounded-2xl border border-slate-800 shadow-2xl">
-          <svg className="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <span>Loading Business Analytics...</span>
-        </div>
-      </main>
-    );
-  }
-
-  if (error || !business) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-        <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 text-center max-w-md shadow-2xl space-y-3">
-          <div className="text-4xl">⚠️</div>
-          <h2 className="text-xl font-bold text-red-400">Business Not Found</h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            No business matching slug <span className="text-amber-400 font-mono">"{slug}"</span> exists.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 selection:bg-amber-500 selection:text-slate-950">
       <div className="max-w-6xl mx-auto space-y-8">
         
         {/* Header Section */}
         <div className="space-y-6">
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-              <span>Your Google Reputation Dashboard</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400">
-              Track reviews, feedback & customer experience in one place.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                <span>Your Google Reputation Dashboard</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400">
+                Track reviews, feedback & customer experience in one place.
+              </p>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-bold rounded-xl transition flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <span>🔒</span> Logout
+            </button>
           </div>
 
           {/* Business Info Banner */}
@@ -304,7 +412,6 @@ export default function DedicatedBusinessAdmin({
               {avgRating} <span className="text-lg">★</span>
             </p>
             <p className="text-[11px] text-slate-500">Based on all customer ratings collected</p>
-            <p className="text-[10px] text-slate-600 font-medium">Based on total customer interactions</p>
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg hover:border-slate-700/80 transition space-y-1">
@@ -338,7 +445,6 @@ export default function DedicatedBusinessAdmin({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            
             <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800/80 shadow-md space-y-1">
               <div className="text-slate-400 text-base mb-1">👁️</div>
               <p className="text-2xl font-bold text-white">{totalVisitors}</p>
@@ -380,7 +486,6 @@ export default function DedicatedBusinessAdmin({
               <p className="text-[11px] font-medium text-slate-300">Private Feedback</p>
               <p className="text-[10px] text-slate-500">Direct complaints</p>
             </div>
-
           </div>
         </div>
 
@@ -423,7 +528,6 @@ export default function DedicatedBusinessAdmin({
 
             {/* Right Column: AI Summarised Issue & Suggested Action */}
             <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-800/90 shadow-xl space-y-4 flex flex-col justify-between">
-              
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -452,7 +556,6 @@ export default function DedicatedBusinessAdmin({
                     : `Encourage satisfied clients to use the positive rating flow to systematically gather more 5-star Google reviews.`}
                 </p>
               </div>
-
             </div>
 
           </div>
