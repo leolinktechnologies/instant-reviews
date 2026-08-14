@@ -166,7 +166,7 @@ export default function DedicatedBusinessAdmin({
     } catch (err) {
       console.error('Exception:', err);
       setError(true);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
