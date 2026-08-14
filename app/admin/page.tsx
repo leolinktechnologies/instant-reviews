@@ -23,7 +23,8 @@ interface Feedback {
 interface AnalyticsItem {
   id?: string | number;
   business_slug: string;
-  event_type: 'generated' | 'copied_redirect';
+  event_type: 'generated' | 'copied_redirect' | 'visited' | 'rated';
+  rating?: number;
   created_at?: string;
 }
 
@@ -46,7 +47,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Fetch Private Feedbacks
+      // Fetch Private Feedbacks (used ONLY for private feedback list & counts)
       const { data: feedbackData, error: feedbackErr } = await supabase
         .from('feedbacks')
         .select('*')
@@ -58,7 +59,7 @@ export default function AdminDashboard() {
         setFeedbacks(feedbackData);
       }
 
-      // Fetch Review Analytics
+      // Fetch Review Analytics (used for public ratings, generations, & redirects)
       const { data: analyticsData, error: analyticsErr } = await supabase
         .from('review_analytics')
         .select('*')
@@ -80,6 +81,7 @@ export default function AdminDashboard() {
   const businessSet = new Set<string>();
   feedbacks.forEach((f) => {
     if (f.business_name) businessSet.add(f.business_name);
+    if (f.business_slug) businessSet.add(f.business_slug);
   });
   analytics.forEach((a) => {
     if (a.business_slug) businessSet.add(a.business_slug);
@@ -104,11 +106,26 @@ export default function AdminDashboard() {
   // Metrics Calculations
   const totalFeedbacks = filteredFeedbacks.length;
 
-  const avgRating = totalFeedbacks
-    ? (
-        filteredFeedbacks.reduce((acc, f) => acc + f.rating, 0) / totalFeedbacks
-      ).toFixed(1)
-    : '0.0';
+  // STRICT PUBLIC RATING CALCULATION
+  // Derived ONLY from star ratings logged in review_analytics (1 to 5 stars)
+  const publicRatings = filteredAnalytics
+    .filter(
+      (a) =>
+        a.rating !== undefined &&
+        a.rating !== null &&
+        !isNaN(Number(a.rating)) &&
+        Number(a.rating) >= 1 &&
+        Number(a.rating) <= 5
+    )
+    .map((a) => Number(a.rating));
+
+  const totalRatingSum = publicRatings.reduce((acc, curr) => acc + curr, 0);
+  const totalRatingCount = publicRatings.length;
+
+  const avgRating =
+    totalRatingCount > 0
+      ? (totalRatingSum / totalRatingCount).toFixed(1)
+      : '5.0';
 
   const totalGenerated = filteredAnalytics.filter(
     (a) => a.event_type === 'generated'
@@ -129,7 +146,7 @@ export default function AdminDashboard() {
               📊 Admin Analytics & Feedback
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Track AI review generations, Google redirects, and private customer feedback.
+              Track AI review generations, Google redirects, and public rating analytics.
             </p>
           </div>
           
@@ -176,11 +193,11 @@ export default function AdminDashboard() {
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
-            <p className="text-xs font-semibold uppercase text-slate-400">Avg Private Rating</p>
+            <p className="text-xs font-semibold uppercase text-slate-400">Average Customer Rating</p>
             <p className="text-3xl font-extrabold text-amber-400 mt-2">
               {avgRating} <span className="text-xl">★</span>
             </p>
-            <p className="text-[10px] text-slate-500 mt-1">From private feedback</p>
+            <p className="text-[10px] text-slate-500 mt-1">Based on all public funnel star ratings ({totalRatingCount})</p>
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">

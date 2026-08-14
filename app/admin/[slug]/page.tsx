@@ -138,6 +138,7 @@ export default function DedicatedBusinessAdmin({
 
       setBusiness(businessData);
 
+      // Fetch private feedbacks separately for private feedback section
       const { data: feedbackData, error: fbError } = await supabase
         .from('feedbacks')
         .select('*')
@@ -150,6 +151,7 @@ export default function DedicatedBusinessAdmin({
         setFeedbacks(feedbackData || []);
       }
 
+      // Fetch review analytics for public funnel rating interactions
       const { data: analyticsData, error: analyticsErr } = await supabase
         .from('review_analytics')
         .select('*')
@@ -164,31 +166,31 @@ export default function DedicatedBusinessAdmin({
     } catch (err) {
       console.error('Exception:', err);
       setError(true);
-    } finally {
+    } fontally {
       setLoading(false);
     }
   };
 
   const totalFeedbacks = feedbacks.length;
 
-  // OVERALL AVERAGE CUSTOMER RATING CALCULATION
-  // Combine all ratings from both analytics (rated events) and private feedback entries
-  const allRatings: number[] = [
-    ...feedbacks.map((f) => Number(f.rating)).filter((r) => !isNaN(r) && r > 0),
-    ...analytics
-      .map((a) => Number(a.rating))
-      .filter((r) => !isNaN(r) && r > 0),
-  ];
+  // STRICT AVERAGE CUSTOMER RATING CALCULATION
+  // Derived ONLY from public funnel star selections logged in review_analytics (1-5 stars)
+  const customerRatings = analytics
+    .filter((a) => a.rating !== undefined && a.rating !== null && !isNaN(Number(a.rating)) && Number(a.rating) >= 1 && Number(a.rating) <= 5)
+    .map((a) => Number(a.rating));
 
-  const avgRating = allRatings.length
-    ? (allRatings.reduce((acc, curr) => acc + curr, 0) / allRatings.length).toFixed(1)
+  const totalRatingSum = customerRatings.reduce((sum, curr) => sum + curr, 0);
+  const totalRatingCount = customerRatings.length;
+
+  const avgRating = totalRatingCount > 0
+    ? (totalRatingSum / totalRatingCount).toFixed(1)
     : '5.0';
 
   const totalGenerated = analytics.filter((a) => a.event_type === 'generated').length;
   const totalRedirects = analytics.filter((a) => a.event_type === 'copied_redirect').length;
 
   const totalVisitors = Math.max(analytics.length * 3 + totalFeedbacks * 2, 12);
-  const ratingsSelected = Math.max(allRatings.length, analytics.length + totalFeedbacks, 8);
+  const ratingsSelected = Math.max(totalRatingCount, 8);
   const reviewsGenerated = totalGenerated;
   const reviewsCopied = totalRedirects;
   const googleAttempts = totalRedirects;
