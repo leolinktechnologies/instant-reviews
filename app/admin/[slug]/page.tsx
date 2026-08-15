@@ -33,6 +33,65 @@ interface IssueCategory {
   terms: string[];
 }
 
+// Subscription Status Helper
+function getPlanStatus(expiryDateStr?: string) {
+  if (!expiryDateStr) {
+    return {
+      status: 'UNKNOWN',
+      isExpired: false,
+      isExpiringSoon: false,
+      daysLeft: 0,
+      badgeClass: 'bg-slate-800 text-slate-400 border-slate-700',
+      label: 'Plan status unavailable',
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const expiry = new Date(expiryDateStr);
+  expiry.setHours(0, 0, 0, 0);
+
+  const diffTime = expiry.getTime() - today.getTime();
+  const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (daysLeft < 0) {
+    const formattedDate = expiry.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    return {
+      status: 'EXPIRED',
+      isExpired: true,
+      isExpiringSoon: false,
+      daysLeft,
+      badgeClass: 'bg-red-500/10 text-red-400 border-red-500/30',
+      label: `Plan expired on ${formattedDate}`,
+    };
+  }
+
+  if (daysLeft <= 15) {
+    return {
+      status: 'EXPIRING_SOON',
+      isExpired: false,
+      isExpiringSoon: true,
+      daysLeft,
+      badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30 animate-pulse',
+      label: `Expires in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`,
+    };
+  }
+
+  return {
+    status: 'ACTIVE',
+    isExpired: false,
+    isExpiringSoon: false,
+    daysLeft,
+    badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    label: `Active - ${daysLeft} days remaining`,
+  };
+}
+
 // Industry Category Issue Mappings
 const CATEGORY_ISSUES_MAP: Record<string, IssueCategory[]> = {
   restaurant: [
@@ -296,6 +355,9 @@ export default function DedicatedBusinessAdmin({
     );
   }
 
+  // Plan Status Details
+  const planInfo = getPlanStatus(business?.plan_expiry_date);
+
   // 🔓 AUTHENTICATED DASHBOARD METRICS
   const totalFeedbacks = feedbacks.length;
 
@@ -317,7 +379,7 @@ export default function DedicatedBusinessAdmin({
   const dbVisitedCount = analytics.filter((a) => a.event_type === 'visited').length;
   const dbRatedCount = analytics.filter((a) => a.event_type === 'rated').length;
 
-  // Actual Dynamic Visitor Calculation (Checks Database first, falls back smoothly to real interactions)
+  // Actual Dynamic Visitor Calculation
   const totalVisitors = dbVisitedCount > 0 
     ? dbVisitedCount 
     : Math.max(analytics.length, totalFeedbacks);
@@ -402,7 +464,15 @@ export default function DedicatedBusinessAdmin({
                 {business.business_name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white capitalize">{business.business_name}</h2>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-lg font-bold text-white capitalize">{business.business_name}</h2>
+                  
+                  {/* Plan Status Badge */}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-xl border flex items-center gap-1.5 ${planInfo.badgeClass}`}>
+                    <span className="w-2 h-2 rounded-full bg-current"></span>
+                    {planInfo.label}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Public Funnel: <span className="text-slate-300 font-mono">/{slug}</span>
                 </p>
@@ -427,6 +497,37 @@ export default function DedicatedBusinessAdmin({
             </div>
           </div>
         </div>
+
+        {/* Plan Expiry / Renewal Alert Banner */}
+        {(planInfo.isExpiringSoon || planInfo.isExpired) && (
+          <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+            planInfo.isExpired 
+              ? 'bg-red-500/10 border-red-500/30 text-red-300' 
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+          }`}>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{planInfo.isExpired ? '🚨' : '⚠️'}</span>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider">
+                  {planInfo.isExpired ? 'Subscription Expired' : 'Plan Expiring Soon'}
+                </p>
+                <p className="text-xs opacity-90 mt-0.5">
+                  Your plan is valid until{' '}
+                  <span className="font-semibold underline">
+                    {business.plan_expiry_date 
+                      ? new Date(business.plan_expiry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : 'N/A'}
+                  </span>
+                  . Renew your plan to continue using the service without interruption.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-2 bg-slate-950/80 border border-current text-xs font-bold rounded-xl whitespace-nowrap self-stretch sm:self-auto text-center">
+              Contact Admin to Renew
+            </div>
+          </div>
+        )}
 
         {/* Top Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -19,10 +19,12 @@ export default function BusinessReviewPage({ params }: PageProps) {
     business_name: string;
     category: string;
     google_review_url: string;
+    plan_expiry_date?: string;
   } | null>(null);
 
   const [loadingBusiness, setLoadingBusiness] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isPlanExpired, setIsPlanExpired] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
 
   // 4-5 Stars States
@@ -35,9 +37,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Analytics Event Logger (UPDATED to log rating integer value)
+  // Helper: Analytics Event Logger (Supports 'visited', 'rated', 'generated', 'copied_redirect')
   const logAnalytics = async (
-    eventType: 'rated' | 'generated' | 'copied_redirect',
+    eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
   ) => {
     if (!slug) return;
@@ -46,7 +48,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
         {
           business_slug: slug,
           event_type: eventType,
-          rating: ratingVal ?? rating, // Ensures actual star number (1 to 5) is saved
+          rating: ratingVal !== undefined ? ratingVal : rating,
         },
       ]);
     } catch (err) {
@@ -54,7 +56,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  // Fetch Business Details strictly from Supabase
+  // Fetch Business Details from Supabase
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) {
@@ -65,13 +67,28 @@ export default function BusinessReviewPage({ params }: PageProps) {
       try {
         const { data, error } = await supabase
           .from('businesses')
-          .select('business_name, category, google_review_url')
+          .select('business_name, category, google_review_url, plan_expiry_date')
           .eq('slug', slug)
           .single();
 
         if (data && !error) {
           setBusinessData(data);
           setNotFound(false);
+
+          // Check Subscription Expiry Status
+          if (data.plan_expiry_date) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const expiry = new Date(data.plan_expiry_date);
+            expiry.setHours(0, 0, 0, 0);
+
+            if (expiry.getTime() < today.getTime()) {
+              setIsPlanExpired(true);
+            }
+          }
+
+          // Log Visitor Page View Event
+          logAnalytics('visited', null);
         } else {
           setBusinessData(null);
           setNotFound(true);
@@ -89,10 +106,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
   // AI Reviews Trigger
   useEffect(() => {
-    if (rating !== null && rating >= 4 && businessData) {
+    if (rating !== null && rating >= 4 && businessData && !isPlanExpired) {
       generateReviewsAuto(rating, businessData.business_name, businessData.category);
     }
-  }, [rating, businessData]);
+  }, [rating, businessData, isPlanExpired]);
 
   const generateReviewsAuto = async (
     selectedRating: number,
@@ -116,7 +133,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
       const data = await res.json();
       if (data?.reviews && Array.isArray(data.reviews)) {
         setReviews(data.reviews);
-        // Log "generated" event with rating value
         await logAnalytics('generated', selectedRating);
       }
     } catch (err) {
@@ -151,7 +167,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
-    // Log "copied_redirect" event with rating value
     logAnalytics('copied_redirect', rating);
 
     // 1. Copy Review Text to Clipboard with Fallback
@@ -245,6 +260,21 @@ export default function BusinessReviewPage({ params }: PageProps) {
     );
   }
 
+  // Expired Subscription Gate Screen
+  if (isPlanExpired) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 max-w-md space-y-4 shadow-2xl">
+          <div className="text-5xl">⚠️</div>
+          <h1 className="text-2xl font-bold text-amber-400">Service Temporarily Inactive</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            The feedback page for <span className="text-white font-semibold">{businessData.business_name}</span> is currently unavailable.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const businessName = businessData.business_name;
 
   return (
@@ -277,7 +307,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
                   onClick={() => {
                     setRating(star);
                     setFeedbackSubmitted(false);
-                    // Logs the exact star rating immediately into review_analytics
                     logAnalytics('rated', star);
                   }}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"

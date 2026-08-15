@@ -28,9 +28,15 @@ interface AnalyticsItem {
   created_at?: string;
 }
 
+interface BusinessItem {
+  slug: string;
+  business_name: string;
+}
+
 export default function AdminDashboard() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsItem[]>([]);
+  const [registeredBusinesses, setRegisteredBusinesses] = useState<BusinessItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBusiness, setSelectedBusiness] = useState<string>('ALL');
 
@@ -47,7 +53,15 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Fetch Private Feedbacks (used ONLY for private feedback list & counts)
+      // 1. Fetch Registered Businesses for full Filter dropdown
+      const { data: bData } = await supabase
+        .from('businesses')
+        .select('slug, business_name')
+        .order('business_name', { ascending: true });
+
+      if (bData) setRegisteredBusinesses(bData);
+
+      // 2. Fetch Private Feedbacks (1-3 Stars)
       const { data: feedbackData, error: feedbackErr } = await supabase
         .from('feedbacks')
         .select('*')
@@ -59,7 +73,7 @@ export default function AdminDashboard() {
         setFeedbacks(feedbackData);
       }
 
-      // Fetch Review Analytics (used for public ratings, generations, & redirects)
+      // 3. Fetch Review Analytics (Visited, Rated, Generated, Redirected)
       const { data: analyticsData, error: analyticsErr } = await supabase
         .from('review_analytics')
         .select('*')
@@ -77,16 +91,18 @@ export default function AdminDashboard() {
     }
   };
 
-  // Extract unique businesses (slug or name)
-  const businessSet = new Set<string>();
+  // Extract unique filter items combining registered businesses and logged slugs
+  const businessSet = new Map<string, string>(); // slug -> name
+  registeredBusinesses.forEach((b) => businessSet.set(b.slug, b.business_name || b.slug));
   feedbacks.forEach((f) => {
-    if (f.business_name) businessSet.add(f.business_name);
-    if (f.business_slug) businessSet.add(f.business_slug);
+    const key = f.business_slug || f.business_name;
+    if (key && !businessSet.has(key)) businessSet.set(key, f.business_name || key);
   });
   analytics.forEach((a) => {
-    if (a.business_slug) businessSet.add(a.business_slug);
+    if (a.business_slug && !businessSet.has(a.business_slug)) {
+      businessSet.set(a.business_slug, a.business_slug);
+    }
   });
-  const businesses = Array.from(businessSet);
 
   // Filter Data
   const filteredFeedbacks =
@@ -94,8 +110,8 @@ export default function AdminDashboard() {
       ? feedbacks
       : feedbacks.filter(
           (f) =>
-            f.business_name === selectedBusiness ||
-            f.business_slug === selectedBusiness
+            f.business_slug === selectedBusiness ||
+            f.business_name === selectedBusiness
         );
 
   const filteredAnalytics =
@@ -104,10 +120,9 @@ export default function AdminDashboard() {
       : analytics.filter((a) => a.business_slug === selectedBusiness);
 
   // Metrics Calculations
+  const totalVisitors = filteredAnalytics.filter((a) => a.event_type === 'visited').length;
   const totalFeedbacks = filteredFeedbacks.length;
 
-  // STRICT PUBLIC RATING CALCULATION
-  // Derived ONLY from star ratings logged in review_analytics (1 to 5 stars)
   const publicRatings = filteredAnalytics
     .filter(
       (a) =>
@@ -135,6 +150,8 @@ export default function AdminDashboard() {
     (a) => a.event_type === 'copied_redirect'
   ).length;
 
+  const conversionRate = totalVisitors > 0 ? ((totalRedirects / totalVisitors) * 100).toFixed(1) : '0';
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -146,7 +163,7 @@ export default function AdminDashboard() {
               📊 Admin Analytics & Feedback
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Track AI review generations, Google redirects, and public rating analytics.
+              Track funnel scans, AI generations, Google redirects, and private feedback.
             </p>
           </div>
           
@@ -169,10 +186,10 @@ export default function AdminDashboard() {
               onChange={(e) => setSelectedBusiness(e.target.value)}
               className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500/50 w-full sm:w-64"
             >
-              <option value="ALL">All Businesses</option>
-              {businesses.map((b, i) => (
-                <option key={i} value={b}>
-                  {b}
+              <option value="ALL">All Businesses ({businessSet.size})</option>
+              {Array.from(businessSet.entries()).map(([slug, name]) => (
+                <option key={slug} value={slug}>
+                  {name} ({slug})
                 </option>
               ))}
             </select>
@@ -184,32 +201,38 @@ export default function AdminDashboard() {
         </div>
 
         {/* Metrics Overview Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
-            <p className="text-xs font-semibold uppercase text-slate-400">Private Feedbacks</p>
+            <p className="text-xs font-semibold uppercase text-slate-400">Total Scans / Visits</p>
+            <p className="text-3xl font-extrabold text-purple-400 mt-2">{totalVisitors}</p>
+            <p className="text-[10px] text-slate-500 mt-1">Page view visits</p>
+          </div>
+
+          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
+            <p className="text-xs font-semibold uppercase text-slate-400">Private Feedback</p>
             <p className="text-3xl font-extrabold text-red-400 mt-2">{totalFeedbacks}</p>
             <p className="text-[10px] text-slate-500 mt-1">1-3 Star submissions</p>
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
-            <p className="text-xs font-semibold uppercase text-slate-400">Average Customer Rating</p>
+            <p className="text-xs font-semibold uppercase text-slate-400">Average Rating</p>
             <p className="text-3xl font-extrabold text-amber-400 mt-2">
               {avgRating} <span className="text-xl">★</span>
             </p>
-            <p className="text-[10px] text-slate-500 mt-1">Based on all public funnel star ratings ({totalRatingCount})</p>
+            <p className="text-[10px] text-slate-500 mt-1">From {totalRatingCount} ratings</p>
           </div>
 
           <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
             <p className="text-xs font-semibold uppercase text-slate-400">AI Generated</p>
             <p className="text-3xl font-extrabold text-blue-400 mt-2">{totalGenerated}</p>
-            <p className="text-[10px] text-slate-500 mt-1">4-5 Star review triggers</p>
+            <p className="text-[10px] text-slate-500 mt-1">4-5 Star triggers</p>
           </div>
 
-          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg">
+          <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg col-span-2 sm:col-span-1">
             <p className="text-xs font-semibold uppercase text-slate-400">Google Redirects</p>
             <p className="text-3xl font-extrabold text-emerald-400 mt-2">{totalRedirects}</p>
-            <p className="text-[10px] text-slate-500 mt-1">Review copy & opens</p>
+            <p className="text-[10px] text-slate-500 mt-1">{conversionRate}% conversion rate</p>
           </div>
 
         </div>
