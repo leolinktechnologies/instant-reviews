@@ -523,8 +523,24 @@ export default function DedicatedBusinessAdmin({
               </div>
             </div>
 
-            <div className="px-4 py-2 bg-slate-950/80 border border-current text-xs font-bold rounded-xl whitespace-nowrap self-stretch sm:self-auto text-center">
-              Contact Admin to Renew
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 self-stretch sm:self-auto mt-2 sm:mt-0">
+              <a
+                href={`https://wa.me/918279687131?text=${encodeURIComponent(
+                  `Hello Admin, I would like to renew the subscription plan for "${business?.business_name || slug || 'my business'}". Please guide me with the next steps.`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition shadow-md active:scale-95"
+              >
+                <span>💬</span> WhatsApp
+              </a>
+
+              <a
+                href="tel:+918279687131"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-700 font-bold text-xs rounded-xl transition shadow-md active:scale-95"
+              >
+                <span>📞</span> Call Us
+              </a>
             </div>
           </div>
         )}
