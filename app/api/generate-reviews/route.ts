@@ -18,14 +18,14 @@ function getCategoryProfile(rawCategory: string) {
   if (cat.includes('dental') || cat.includes('dentist') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('physio') || cat.includes('eye')) {
     return {
       type: 'healthcare',
-      defaultKeywords: ["consultation", "treatment plan", "routine checkup", "braces", "aligners", "prescribed medicine", "reports review", "post-care guidance"],
+      defaultKeywords: ["checkup", "doctor consultation", "medicine", "reports", "treatment"],
       customKeywords,
       perspectives: [
-        { role: "Symptom / Health Concern", guide: "Discuss a specific concern or reason for consulting the doctor without standard clinic clichés." },
-        { role: "First-hand Consultation", guide: "Focus purely on doctor interaction, diagnosis clarity, or medication guidance." },
-        { role: "Routine Check", guide: "A casual, brief note on a regular follow-up or scheduled checkup." },
-        { role: "Accompanying Someone", guide: "Came along with family or a friend. Talk casually about the atmosphere or overall experience." },
-        { role: "Short Casual Reviewer", guide: "Direct, unpolished 10-18 word summary of the visit." }
+        { role: "Direct Checkup", guide: "Simple review about getting a checkup or medicine." },
+        { role: "Doctor Guidance", guide: "Mentions doctor explaining the issue in simple terms." },
+        { role: "Regular Visit", guide: "Short note on going for a routine check or follow-up." },
+        { role: "Friend or Relative Visit", guide: "Went with someone, easy experience." },
+        { role: "Quick Casual Review", guide: "Very short 10-15 word review about good timing and polite staff." }
       ]
     };
   }
@@ -34,12 +34,12 @@ function getCategoryProfile(rawCategory: string) {
   if (cat.includes('cctv') || cat.includes('security') || cat.includes('biometric') || cat.includes('fire alarm') || cat.includes('surveillance')) {
     return {
       type: 'security_tech',
-      defaultKeywords: ["CCTV camera setup", "biometric attendance machine", "fire alarm testing", "surveillance system", "wiring & installation", "door access control"],
+      defaultKeywords: ["CCTV installation", "camera setup", "biometric machine", "fire alarm", "wiring"],
       customKeywords,
       perspectives: [
-        { role: "Office / Shop Owner", guide: "Installed security systems for business/store premises." },
-        { role: "Home Client", guide: "CCTV or door security installed for home." },
-        { role: "Service Client", guide: "Called for repair or extra camera addition." }
+        { role: "Shop/Office Owner", guide: "Got CCTV or biometric installed at office or shop." },
+        { role: "Home Owner", guide: "Installed cameras at home." },
+        { role: "Service Work", guide: "Called them for repair or adding extra cameras." }
       ]
     };
   }
@@ -48,12 +48,11 @@ function getCategoryProfile(rawCategory: string) {
   if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('digital') || cat.includes('web') || cat.includes('agency') || cat.includes('solution')) {
     return {
       type: 'b2b_tech',
-      defaultKeywords: ["website redesign", "software development", "SEO campaign", "bug fixes", "cloud setup", "UI redesign", "project delivery"],
+      defaultKeywords: ["website work", "software setup", "bug fix", "project delivery"],
       customKeywords,
       perspectives: [
-        { role: "Business Client", guide: "Hired them for a project or IT support." },
-        { role: "First-time client", guide: "Mentions scope discussion and execution." },
-        { role: "Ongoing client", guide: "Mentions regular maintenance and support." }
+        { role: "Business Client", guide: "Hired them for website or software work." },
+        { role: "New Client", guide: "Simple review about clear talk and timely completion." }
       ]
     };
   }
@@ -62,11 +61,11 @@ function getCategoryProfile(rawCategory: string) {
   if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery')) {
     return {
       type: 'food',
-      defaultKeywords: ["dine-in", "family dinner", "seating area", "freshly prepared", "quick bite"],
+      defaultKeywords: ["food taste", "dinner", "seating", "fresh food"],
       customKeywords,
       perspectives: [
-        { role: "First-time diner", guide: "Tried dishes based on local recommendations." },
-        { role: "Group diner", guide: "Meal with friends or family." }
+        { role: "First Time Visitor", guide: "Tried food based on friend's suggestion." },
+        { role: "Family/Friends Group", guide: "Simple dinner or lunch review." }
       ]
     };
   }
@@ -74,24 +73,23 @@ function getCategoryProfile(rawCategory: string) {
   // GENERAL SERVICES
   return {
     type: 'general',
-    defaultKeywords: ["in-store visit", "billing", "work quality", "delivery time", "service inquiry"],
+    defaultKeywords: ["in-store visit", "billing", "work quality", "delivery time"],
     customKeywords,
     perspectives: [
-      { role: "First-time customer", guide: "Visited for inquiry or service." },
-      { role: "Regular customer", guide: "Consistently good service over time." }
+      { role: "Customer", guide: "Normal daily review about service and timing." }
     ]
   };
 }
 
-// Code-level post-processing filter to catch repetitive phrases
+// Code-level filter to catch repetitive phrases and hard English words
 function sanitizeRepetitivePhrases(reviews: string[], businessName: string): string[] {
   const commonRepetitiveRegex = [
-    { pattern: /^visited\b/i, replacement: 'Went in' },
+    { pattern: /^visited\b/i, replacement: 'Went to' },
     { pattern: /the appointment system was\b/i, replacement: 'Booking was' },
-    { pattern: /the appointment system\b/i, replacement: 'the booking process' },
-    { pattern: /found this team\b/i, replacement: 'came across them' },
-    { pattern: /took my (son|daughter)\b/i, replacement: 'came with my kid' },
-    { pattern: /staff was nice\b/i, replacement: 'everyone was helpful' },
+    { pattern: /the appointment system\b/i, replacement: 'booking' },
+    { pattern: /found this team\b/i, replacement: 'got their contact' },
+    { pattern: /took my (son|daughter)\b/i, replacement: 'went with my family' },
+    { pattern: /staff was nice\b/i, replacement: 'everyone was polite' },
   ];
 
   return reviews.map((rev) => {
@@ -119,19 +117,18 @@ export async function POST(req: Request) {
     const selectedKeywords = allKeywords.sort(() => 0.5 - Math.random()).slice(0, 2).join(", ");
     const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random()).slice(0, 3);
 
-    // Dynamic temperature up to 0.95 for maximum lexical diversity
     const randomTemp = Number((0.90 + Math.random() * 0.08).toFixed(2));
 
     const starNuance = rating <= 4 
-      ? "RATING IS 4 STARS: Include 1 tiny realistic detail (e.g., 'parking spot was tight', 'waited 10 mins extra', 'counter was slightly crowded')." 
-      : "RATING IS 5 STARS: Grounded positive experience without fake, dramatic praise.";
+      ? "RATING IS 4 STARS: Mention 1 small normal thing like 'had to wait 10 mins extra' or 'parking was a bit small'." 
+      : "RATING IS 5 STARS: Simple positive review like a normal happy customer.";
 
-    const prompt = `Generate 3 completely DISTINCT, raw, organic Google reviews for "${businessName}" (${category}).
+    const prompt = `Generate 3 completely DISTINCT, simple Indian English Google reviews for "${businessName}" (${category}).
 
 Selected Rating: ${rating} Stars.
 ${starNuance}
 
-OPTIONAL CONTEXT KEYWORDS (Use at most 1 in the whole batch):
+OPTIONAL WORDS TO MIX (Do NOT force into all reviews):
 ${selectedKeywords}
 
 PERSPECTIVES:
@@ -139,22 +136,24 @@ PERSPECTIVES:
 - Review 2 (${selectedPerspectives[1].role}): ${selectedPerspectives[1].guide}
 - Review 3 (${selectedPerspectives[2].role}): ${selectedPerspectives[2].guide}
 
-STRICT LEXICAL DIVERSITY & ANTI-REPETITION LAWS:
-1. ABSOLUTE BAN ON REPEATED PHRASES (DO NOT USE ANY OF THESE AT ALL):
+STRICT LANGUAGE & STYLE RULES (INDIAN EASY ENGLISH):
+1. USE SIMPLE DAILY INDIAN ENGLISH:
+   - Use simple words like "doctor was very good", "proper checkup done", "no long wait", "camera setup done neatly", "price was fair", "good response".
+   - DO NOT USE IELTS/ADVANCED WORDS like: "premises", "evaluation", "consultation", "prescribed", "accompanying", "exceptional", "seamless", "top-notch", "impeccable", "paramount", "proficiency".
+
+2. ABSOLUTE BAN ON REPEATED PHRASES (DO NOT USE AT ALL):
    - "visited", "visited here", "the appointment system", "appointment system", "found this team", "took my son", "took my daughter", "brought my son", "staff was nice", "explained everything", "overall satisfied", "highly recommended", "top-notch", "smooth experience", "excellent service".
 
-2. VARY ALL OPENING WORDS:
-   - Every single review MUST begin with a totally different word and grammar structure.
-   - NEVER start two reviews with the same word ("I", "The", "Had", "Went").
-
-3. UNPREDICTABLE SYNTAX:
-   - Review 1: Focus on the actual issue/reason for visit.
-   - Review 2: Focus on time spent, atmosphere, or report discussion.
-   - Review 3: Short 12-word casual remark.
+3. VARY ALL OPENING WORDS:
+   - Start each review with completely different words.
+   - NEVER start multiple reviews with "I", "The", "Went", "Had".
 
 4. BUSINESS NAME RULES:
    - Mention "${businessName}" or "${category}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
-   - For others, use natural references like "here", "the doctor", "they", or no pronoun at all.
+   - For others, use simple words like "here", "the doctor", "they", "this shop", or no pronoun at all.
+
+5. CASUAL HUMAN ENDINGS:
+   - End like real people: "Done in 20 mins", "No complaints", "Good experience", "Will go again if needed".
 
 Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
 
@@ -162,7 +161,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       messages: [
         {
           role: 'system',
-          content: 'You generate human Google reviews with 100% unique vocabulary. You NEVER repeat multi-word phrases or stock template sentences across reviews. Output ONLY a valid JSON array of strings.',
+          content: 'You write natural, simple Indian English Google reviews. You use simple daily spoken vocabulary and avoid fancy or high-level English words. Output ONLY a valid JSON array of strings.',
         },
         {
           role: 'user',
@@ -188,7 +187,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       reviews = reviews.map((rev) => {
         const words = rev.trim().split(/\s+/);
         if (words.length < 8) {
-          return `${rev.trim()} Decent experience with the consultation.`;
+          return `${rev.trim()} Good experience overall.`;
         }
         return rev.trim();
       });
