@@ -102,7 +102,7 @@ function getCategoryProfile(rawCategory: string) {
   };
 }
 
-// Post-processing Sanitizer to remove AI structural leaks & repetitive phrases
+// Post-processing Sanitizer to remove leaks & any non-English/Hinglish remnants
 function sanitizeReviewContent(reviews: string[], categoryType: string): string[] {
   const commonBannedPhrases = [
     { pattern: /^doctor was good\b/i, replacement: 'Clear advice provided' },
@@ -111,6 +111,9 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
     { pattern: /found this team\b/i, replacement: 'got their number' },
     { pattern: /staff was nice\b/i, replacement: 'everyone was polite' },
   ];
+
+  // Regex to strip out common accidental Hinglish words
+  const hinglishCleaner = /\b(accha|achha|bohot|bahut|badiya|sahi|hai|ho|gaya|kar|diya|chahiye|wala|wali|wale|karo|plz)\b/gi;
 
   return reviews.map((rev) => {
     let cleaned = rev.trim();
@@ -122,6 +125,8 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
     commonBannedPhrases.forEach(({ pattern, replacement }) => {
       cleaned = cleaned.replace(pattern, replacement);
     });
+
+    cleaned = cleaned.replace(hinglishCleaner, '').replace(/\s+/g, ' ').trim();
 
     return cleaned;
   });
@@ -165,9 +170,8 @@ export async function POST(req: Request) {
 
     const starNuance = rating <= 4 
       ? "RATING IS 4 STARS: Include 1 small realistic detail (e.g. 'had to wait 10 mins extra', 'parking area was small', 'counter was a bit busy')." 
-      : "RATING IS 5 STARS: Simple positive experience from a real everyday Indian customer.";
+      : "RATING IS 5 STARS: Simple positive experience from a real customer.";
 
-    // PROMPT WITH FREEDOM IN OPENINGS:
     const prompt = `Generate 3 completely UNIQUE, raw, organic Google reviews for "${businessName}" (Category: ${category}).
 Batch Seed ID: ${uniqueSessionSeed}
 
@@ -187,17 +191,21 @@ REVIEW PERSPECTIVES FOR THIS BATCH:
 - Review 2 (${selectedPerspectives[1].role}): ${selectedPerspectives[1].guide}
 - Review 3 (${selectedPerspectives[2].role}): ${selectedPerspectives[2].guide}
 
-STRICT HUMAN-WRITING & OPENING FREEDOM:
-1. NATURAL OPENINGS & HIGH VARIETY:
+STRICT LANGUAGE & HUMAN-WRITING RULES:
+1. 100% PURE ENGLISH ONLY:
+   - WRITE EXCLUSIVELY IN STANDARD ENGLISH.
+   - ABSOLUTELY NO HINDI, NO HINGLISH, AND NO TRANSLITERATED WORDS (e.g., NEVER use 'bohot', 'accha', 'hai', 'gaya', 'kar', etc.).
+
+2. NATURAL OPENINGS & HIGH VARIETY:
    - Let each review start completely naturally in its own unique way.
    - DO NOT follow a fixed starting template. Each of the 3 reviews MUST start with a totally different word and sentence structure.
    - Avoid generic cliché starters like "Great experience", "I went to", or "Visited here".
 
-2. NATURAL INDIAN ENGLISH STYLE:
-   - Simple daily Indian English. Short sentences, unpolished human typing.
+3. SIMPLE CASUAL WRITING STYLE:
+   - Simple daily conversational English. Short, natural sentences.
    - NO IELTS/fancy words (avoid: "seamless", "impeccable", "top-notch", "exceptional", "proficiency", "consultation").
 
-3. BUSINESS NAME RULE:
+4. BUSINESS NAME RULE:
    - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
    - For the other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
 
@@ -207,7 +215,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       messages: [
         {
           role: 'system',
-          content: 'You generate raw, casual, human-written Indian Google reviews. Output ONLY a valid JSON array of strings.',
+          content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a valid JSON array of strings in pure English.',
         },
         {
           role: 'user',
