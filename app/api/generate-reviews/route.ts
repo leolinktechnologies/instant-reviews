@@ -185,7 +185,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
           content: prompt,
         },
       ],
-      model: 'llama-3.3-70b-versatile',
+      model: 'llama-3.1-8b-instant',
       temperature: randomTemp,
     });
 
