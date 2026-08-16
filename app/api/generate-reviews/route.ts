@@ -5,6 +5,23 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
+// Retry helper for handling Groq 429 Rate Limit errors with exponential backoff
+async function createGroqCompletionWithRetry(groqClient: any, params: any, retries = 3, delay = 1500) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await groqClient.chat.completions.create(params);
+    } catch (err: any) {
+      if (err?.status === 429 && i < retries - 1) {
+        console.warn(`Groq 429 Rate Limit hit. Retrying in ${delay}ms... (Attempt ${i + 1} of ${retries})`);
+        await new Promise((res) => setTimeout(res, delay));
+        delay *= 2;
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 // Helper to extract and clean comma/slash separated keywords from category input
 function parseCategoriesAndKeywords(rawCategory: string): string[] {
   if (!rawCategory) return [];
@@ -98,7 +115,6 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
   return reviews.map((rev) => {
     let cleaned = rev.trim();
 
-    // Cross-contamination Safety Guard: Clean tech terms from healthcare
     if (categoryType === 'healthcare') {
       cleaned = cleaned.replace(/\b(cctv|camera|biometric|wiring|installation)\b/gi, 'treatment');
     }
@@ -109,6 +125,23 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
 
     return cleaned;
   });
+}
+
+// Robust JSON extraction helper
+function extractJsonArray(rawText: string): string[] {
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        console.error('Regex JSON array extraction failed');
+      }
+    }
+    return [];
+  }
 }
 
 export async function POST(req: Request) {
@@ -122,15 +155,11 @@ export async function POST(req: Request) {
 
     const profile = getCategoryProfile(category);
     
-    // Combine custom input keywords with defaults and shuffle
     const allCategoryKeywords = [...new Set([...profile.parsedKeywords, ...profile.defaultKeywords])].sort(() => 0.5 - Math.random());
-    
-    // Select EXACTLY 1 keyword to use across this 3-review batch (ensures 1-in-5 sparse rotation rule)
     const singleSelectedKeyword = allCategoryKeywords.length > 0 ? allCategoryKeywords[0] : "";
 
     const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random()).slice(0, 3);
 
-    // Maximum Entropy Temperature (1.05) combined with random seed string
     const randomTemp = Number((0.98 + Math.random() * 0.12).toFixed(2));
     const uniqueSessionSeed = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
@@ -138,6 +167,7 @@ export async function POST(req: Request) {
       ? "RATING IS 4 STARS: Include 1 small realistic detail (e.g. 'had to wait 10 mins extra', 'parking area was small', 'counter was a bit busy')." 
       : "RATING IS 5 STARS: Simple positive experience from a real everyday Indian customer.";
 
+    // PROMPT WITH FREEDOM IN OPENINGS:
     const prompt = `Generate 3 completely UNIQUE, raw, organic Google reviews for "${businessName}" (Category: ${category}).
 Batch Seed ID: ${uniqueSessionSeed}
 
@@ -146,7 +176,7 @@ ${starNuance}
 
 STRICT CATEGORY ISOLATION RULE:
 - Category Type is strictly: "${profile.type.toUpperCase()}".
-- DO NOT mention terms from other industries! (For example, in Healthcare, NEVER use words like CCTV, camera, software, website, installation, or biometric).
+- DO NOT mention terms from other industries! (e.g., in Healthcare, NEVER use words like CCTV, camera, software, website, installation, or biometric).
 
 KEYWORD ROTATION RULE:
 - Primary keyword selected for optional single-time use in batch: "${singleSelectedKeyword}".
@@ -157,24 +187,23 @@ REVIEW PERSPECTIVES FOR THIS BATCH:
 - Review 2 (${selectedPerspectives[1].role}): ${selectedPerspectives[1].guide}
 - Review 3 (${selectedPerspectives[2].role}): ${selectedPerspectives[2].guide}
 
-STRICT HUMAN-WRITING & ANTI-REPETITION RULES:
-1. BAN ON REPEATED OPENINGS (DO NOT USE THESE TO START ANY REVIEW):
-   - DO NOT START WITH: "doctor was good", "visited", "visited here", "found this team", "I went", "The doctor", "Great place".
-   - Start Review 1 with an action or issue (e.g. "Went in for a quick...", "Got my checkup done...", "Needed an opinion on...")
-   - Start Review 2 with a time or process note (e.g. "Appointment was around...", "Booking didn't take long...", "Quick 15-min visit...")
-   - Start Review 3 with a direct short thought (e.g. "Decent experience...", "Polite behavior at...", "Everything was handled...")
+STRICT HUMAN-WRITING & OPENING FREEDOM:
+1. NATURAL OPENINGS & HIGH VARIETY:
+   - Let each review start completely naturally in its own unique way.
+   - DO NOT follow a fixed starting template. Each of the 3 reviews MUST start with a totally different word and sentence structure.
+   - Avoid generic cliché starters like "Great experience", "I went to", or "Visited here".
 
 2. NATURAL INDIAN ENGLISH STYLE:
-   - Use simple daily language. Short sentences. Unpolished human typing.
+   - Simple daily Indian English. Short sentences, unpolished human typing.
    - NO IELTS/fancy words (avoid: "seamless", "impeccable", "top-notch", "exceptional", "proficiency", "consultation").
 
 3. BUSINESS NAME RULE:
    - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
-   - For other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
+   - For the other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
 
 Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
 
-    const chatCompletion = await groq.chat.completions.create({
+    const chatCompletion = await createGroqCompletionWithRetry(groq, {
       messages: [
         {
           role: 'system',
@@ -189,16 +218,16 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       temperature: randomTemp,
     });
 
-    const content = chatCompletion.choices[0]?.message?.content || '[]';
+    const content = chatCompletion?.choices[0]?.message?.content || '[]';
     
     const cleanedContent = content
       .replace(/```json/g, '')
       .replace(/```/g, '')
       .trim();
 
-    let reviews: string[] = JSON.parse(cleanedContent);
+    let reviews: string[] = extractJsonArray(cleanedContent);
 
-    if (Array.isArray(reviews)) {
+    if (Array.isArray(reviews) && reviews.length > 0) {
       reviews = sanitizeReviewContent(reviews, profile.type);
 
       reviews = reviews.map((rev) => {
@@ -208,6 +237,12 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
         }
         return rev.trim();
       });
+    } else {
+      reviews = [
+        "Overall simple and hassle-free experience here.",
+        "Quick service and clear guidance provided.",
+        "Satisfied with how everything was handled."
+      ];
     }
 
     return NextResponse.json({ reviews });
