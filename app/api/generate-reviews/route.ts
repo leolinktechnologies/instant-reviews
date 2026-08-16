@@ -5,102 +5,85 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
-function extractKeywordsFromCategory(category: string): string[] {
-  if (!category) return [];
-  return category.split(/[,/|]+/).map(item => item.trim()).filter(Boolean);
+// Helper: Split and randomize comma-separated category keywords
+function parseCategoriesAndKeywords(rawCategory: string) {
+  if (!rawCategory) return { activeCategory: 'General Business', randomKeywords: [] };
+
+  const parts = rawCategory
+    .split(/[,/|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  // Shuffle keywords dynamically on every call
+  const shuffled = [...parts].sort(() => Math.random() - 0.5);
+  const activeCategory = shuffled[0] || 'Business';
+  const randomKeywords = shuffled.slice(0, 3);
+
+  return { activeCategory, randomKeywords };
 }
 
-function getCategoryProfile(rawCategory: string) {
-  const cat = (rawCategory || '').toLowerCase();
-  const customKeywords = extractKeywordsFromCategory(rawCategory);
+// Dynamic Niche Profiler
+function getDynamicCategoryProfile(rawCategory: string) {
+  const cat = rawCategory.toLowerCase();
 
-  // HEALTHCARE / CLINIC / DENTAL / HOSPITAL
-  if (cat.includes('dental') || cat.includes('dentist') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('physio') || cat.includes('eye')) {
+  if (cat.includes('dental') || cat.includes('dentist') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('physio') || cat.includes('eye') || cat.includes('skin')) {
     return {
-      type: 'healthcare',
-      defaultKeywords: ["checkup", "doctor consultation", "medicine", "reports", "treatment"],
-      customKeywords,
-      perspectives: [
-        { role: "Direct Checkup", guide: "Simple review about getting a checkup or medicine." },
-        { role: "Doctor Guidance", guide: "Mentions doctor explaining the issue in simple terms." },
-        { role: "Regular Visit", guide: "Short note on going for a routine check or follow-up." },
-        { role: "Friend or Relative Visit", guide: "Went with someone, easy experience." },
-        { role: "Quick Casual Review", guide: "Very short 10-15 word review about good timing and polite staff." }
+      domain: 'Healthcare & Medical',
+      nicheTerms: ['checkup', 'doctor', 'treatment', 'staff behavior', 'cleanliness', 'consultation'],
+      styles: [
+        'Routine checkup experience, short & neat',
+        'Doctor explained the issue patiently without hurry',
+        'Quick visit with family member, smooth overall process'
       ]
     };
   }
 
-  // SECURITY / CCTV / SURVEILLANCE
-  if (cat.includes('cctv') || cat.includes('security') || cat.includes('biometric') || cat.includes('fire alarm') || cat.includes('surveillance')) {
+  if (cat.includes('cctv') || cat.includes('security') || cat.includes('biometric') || cat.includes('alarm') || cat.includes('surveillance') || cat.includes('camera')) {
     return {
-      type: 'security_tech',
-      defaultKeywords: ["CCTV installation", "camera setup", "biometric machine", "fire alarm", "wiring"],
-      customKeywords,
-      perspectives: [
-        { role: "Shop/Office Owner", guide: "Got CCTV or biometric installed at office or shop." },
-        { role: "Home Owner", guide: "Installed cameras at home." },
-        { role: "Service Work", guide: "Called them for repair or adding extra cameras." }
+      domain: 'Security & Tech Hardware',
+      nicheTerms: ['camera setup', 'wiring', 'biometric unit', 'office installation', 'neat work'],
+      styles: [
+        'Installed at home/shop, clear video quality and quick fitting',
+        'Technician came on time, clean wiring done',
+        'Fair pricing for security setup'
       ]
     };
   }
 
-  // IT / TECH / AGENCIES
-  if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('digital') || cat.includes('web') || cat.includes('agency') || cat.includes('solution')) {
+  if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery') || cat.includes('sweets') || cat.includes('hotel')) {
     return {
-      type: 'b2b_tech',
-      defaultKeywords: ["website work", "software setup", "bug fix", "project delivery"],
-      customKeywords,
-      perspectives: [
-        { role: "Business Client", guide: "Hired them for website or software work." },
-        { role: "New Client", guide: "Simple review about clear talk and timely completion." }
+      domain: 'Food & Dining',
+      nicheTerms: ['food taste', 'seating', 'service', 'fresh items', 'ambience'],
+      styles: [
+        'Went for dinner with friends, nice taste',
+        'Tried their famous dish, totally worth it',
+        'Quick bite, clean seating area'
       ]
     };
   }
 
-  // RESTAURANTS / CAFES / FOOD
-  if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery')) {
+  if (cat.includes('salon') || cat.includes('beauty') || cat.includes('spa') || cat.includes('hair') || cat.includes('parlour')) {
     return {
-      type: 'food',
-      defaultKeywords: ["food taste", "dinner", "seating", "fresh food"],
-      customKeywords,
-      perspectives: [
-        { role: "First Time Visitor", guide: "Tried food based on friend's suggestion." },
-        { role: "Family/Friends Group", guide: "Simple dinner or lunch review." }
+      domain: 'Salon & Grooming',
+      nicheTerms: ['haircut', 'glowing skin', 'polite staff', 'relaxing setup', 'service'],
+      styles: [
+        'Got haircut done, very clean finish',
+        'Friendly staff, took proper care',
+        'Went for routine grooming, good prices'
       ]
     };
   }
 
-  // GENERAL SERVICES
+  // Default fallback for any custom service/category
   return {
-    type: 'general',
-    defaultKeywords: ["in-store visit", "billing", "work quality", "delivery time"],
-    customKeywords,
-    perspectives: [
-      { role: "Customer", guide: "Normal daily review about service and timing." }
+    domain: 'Local Business & Services',
+    nicheTerms: ['service', 'response', 'work done', 'timely delivery', 'fair charges'],
+    styles: [
+      'Very helpful team, completed work smoothly',
+      'Good experience, reasonable rates',
+      'Quick response and polite nature'
     ]
   };
-}
-
-// Code-level filter to catch repetitive phrases and hard English words
-function sanitizeRepetitivePhrases(reviews: string[], businessName: string): string[] {
-  const commonRepetitiveRegex = [
-    { pattern: /^visited\b/i, replacement: 'Went to' },
-    { pattern: /the appointment system was\b/i, replacement: 'Booking was' },
-    { pattern: /the appointment system\b/i, replacement: 'booking' },
-    { pattern: /found this team\b/i, replacement: 'got their contact' },
-    { pattern: /took my (son|daughter)\b/i, replacement: 'went with my family' },
-    { pattern: /staff was nice\b/i, replacement: 'everyone was polite' },
-  ];
-
-  return reviews.map((rev) => {
-    let cleaned = rev.trim();
-
-    commonRepetitiveRegex.forEach(({ pattern, replacement }) => {
-      cleaned = cleaned.replace(pattern, replacement);
-    });
-
-    return cleaned;
-  });
 }
 
 export async function POST(req: Request) {
@@ -112,56 +95,61 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Groq API Key not configured' }, { status: 500 });
     }
 
-    const profile = getCategoryProfile(category);
-    const allKeywords = [...new Set([...profile.customKeywords, ...profile.defaultKeywords])];
-    const selectedKeywords = allKeywords.sort(() => 0.5 - Math.random()).slice(0, 2).join(", ");
-    const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random()).slice(0, 3);
+    const { activeCategory, randomKeywords } = parseCategoriesAndKeywords(category);
+    const profile = getDynamicCategoryProfile(category);
 
-    const randomTemp = Number((0.90 + Math.random() * 0.08).toFixed(2));
+    // Combine custom keywords passed in input with standard domain keywords
+    const keywordPool = [...new Set([...randomKeywords, ...profile.nicheTerms])]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3)
+      .join(', ');
+
+    // Randomize temperature slightly to break output predictability
+    const randomTemp = Number((0.92 + Math.random() * 0.12).toFixed(2));
+    const randomSeed = Math.floor(Math.random() * 100000);
 
     const starNuance = rating <= 4 
-      ? "RATING IS 4 STARS: Mention 1 small normal thing like 'had to wait 10 mins extra' or 'parking was a bit small'." 
-      : "RATING IS 5 STARS: Simple positive review like a normal happy customer.";
+      ? "RATING IS 4 STARS: Mention 1 tiny practical observation (e.g., 'parking took 5 mins', 'had to wait short while', 'slightly crowded inside')." 
+      : "RATING IS 5 STARS: Natural positive feedback without over-exaggerated praise.";
 
-    const prompt = `Generate 3 completely DISTINCT, simple Indian English Google reviews for "${businessName}" (${category}).
+    const prompt = `Generate 3 completely UNIQUE, realistic Google reviews written by different Indian customers for "${businessName}" (${activeCategory}).
 
-Selected Rating: ${rating} Stars.
+Context / Focus Keywords (Use lightly if relevant, do NOT force all):
+${keywordPool}
+
+Rating Context: ${rating} Stars.
 ${starNuance}
 
-OPTIONAL WORDS TO MIX (Do NOT force into all reviews):
-${selectedKeywords}
+Target Vibe Profiles for the 3 Reviews:
+- Review 1: Very short & direct (6 to 12 words max). Real human casual style.
+- Review 2: Moderate detail (14 to 22 words). Focuses on staff behavior or work completion.
+- Review 3: Natural conversational style (10 to 18 words). Focuses on overall satisfaction or recommendation.
 
-PERSPECTIVES:
-- Review 1 (${selectedPerspectives[0].role}): ${selectedPerspectives[0].guide}
-- Review 2 (${selectedPerspectives[1].role}): ${selectedPerspectives[1].guide}
-- Review 3 (${selectedPerspectives[2].role}): ${selectedPerspectives[2].guide}
+HUMAN-LIKE ORGANIC RULES (CRITICAL):
+1. LANGUAGE: Natural daily spoken Indian English.
+   - Allowed terms: "good work", "doctor was nice", "proper checkup", "neat setup", "pricing reasonable", "came on time", "satisfied".
+   - BANNED ADVANCED / FANCY WORDS: "premises", "exceptional", "impeccable", "paramount", "proficiency", "top-notch", "seamless", "exemplary", "consultation", "prescribed".
+   
+2. NO REPETITIVE PATTERNS:
+   - DO NOT start reviews with identical phrases like "Visited here", "The appointment system", "I went to", "Took my daughter".
+   - DO NOT end all reviews with "Highly recommended" or "Will visit again". Mix variations naturally (e.g., "Good job", "No hassle", "Nice overall", "Recommended.").
 
-STRICT LANGUAGE & STYLE RULES (INDIAN EASY ENGLISH):
-1. USE SIMPLE DAILY INDIAN ENGLISH:
-   - Use simple words like "doctor was very good", "proper checkup done", "no long wait", "camera setup done neatly", "price was fair", "good response".
-   - DO NOT USE IELTS/ADVANCED WORDS like: "premises", "evaluation", "consultation", "prescribed", "accompanying", "exceptional", "seamless", "top-notch", "impeccable", "paramount", "proficiency".
+3. NAME MENTION RULE:
+   - Mention "${businessName}" in ONLY 1 out of the 3 reviews (or skip it entirely in some calls). Use "they", "this place", "the team", "doctor", or direct sentences.
 
-2. ABSOLUTE BAN ON REPEATED PHRASES (DO NOT USE AT ALL):
-   - "visited", "visited here", "the appointment system", "appointment system", "found this team", "took my son", "took my daughter", "brought my son", "staff was nice", "explained everything", "overall satisfied", "highly recommended", "top-notch", "smooth experience", "excellent service".
+4. REALISTIC TEXT VARIATION:
+   - Allow natural human writing quirks (e.g., lowercase start in short reviews, simple sentence structures, avoiding formal corporate tone).
 
-3. VARY ALL OPENING WORDS:
-   - Start each review with completely different words.
-   - NEVER start multiple reviews with "I", "The", "Went", "Had".
+Random Session ID: ${randomSeed}
 
-4. BUSINESS NAME RULES:
-   - Mention "${businessName}" or "${category}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
-   - For others, use simple words like "here", "the doctor", "they", "this shop", or no pronoun at all.
-
-5. CASUAL HUMAN ENDINGS:
-   - End like real people: "Done in 20 mins", "No complaints", "Good experience", "Will go again if needed".
-
-Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
+Return ONLY a valid JSON array of 3 plain strings.
+Example output format: ["Review 1...", "Review 2...", "Review 3..."]`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: 'You write natural, simple Indian English Google reviews. You use simple daily spoken vocabulary and avoid fancy or high-level English words. Output ONLY a valid JSON array of strings.',
+          content: 'You are an authentic Indian Google reviewer generator. You output ONLY a valid JSON array of 3 natural, human-like reviews using simple daily language.',
         },
         {
           role: 'user',
@@ -170,10 +158,11 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       ],
       model: 'llama-3.3-70b-versatile',
       temperature: randomTemp,
+      top_p: 0.95,
     });
 
     const content = chatCompletion.choices[0]?.message?.content || '[]';
-    
+
     const cleanedContent = content
       .replace(/```json/g, '')
       .replace(/```/g, '')
@@ -181,16 +170,9 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
 
     let reviews: string[] = JSON.parse(cleanedContent);
 
+    // Clean up whitespace without adding generic static footers
     if (Array.isArray(reviews)) {
-      reviews = sanitizeRepetitivePhrases(reviews, businessName);
-
-      reviews = reviews.map((rev) => {
-        const words = rev.trim().split(/\s+/);
-        if (words.length < 8) {
-          return `${rev.trim()} Good experience overall.`;
-        }
-        return rev.trim();
-      });
+      reviews = reviews.map((rev) => rev.trim());
     }
 
     return NextResponse.json({ reviews });
