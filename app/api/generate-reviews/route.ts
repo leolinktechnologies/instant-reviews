@@ -21,11 +21,11 @@ function getCategoryProfile(rawCategory: string) {
       defaultKeywords: ["consultation", "treatment plan", "routine checkup", "braces", "aligners", "prescribed medicine", "reports review", "post-care guidance", "appointment booking"],
       customKeywords,
       perspectives: [
-        { role: "Individual Patient (Self Visit)", guide: "Came in for personal checkup or symptom evaluation. Speaks purely from personal experience." },
-        { role: "First-time Visitor", guide: "Mentions finding the place, smooth registration, or initial evaluation." },
-        { role: "Follow-up / Ongoing Patient", guide: "Mentions returning for review, report analysis, or next step in treatment." },
-        { role: "Random Family / Companion Visit", guide: "Occasional visit accompanied by someone (e.g., parent, child, or family member). Keep phrasing 100% natural and non-templated." },
-        { role: "Short Casual Reviewer", guide: "Direct 12-18 word note about timing, doctor's explanation, and overall visit." }
+        { role: "Direct Symptom / Evaluation", guide: "Focus on coming in for a specific issue, symptom, or routine checkup. Speak naturally about the consultation." },
+        { role: "Process / Appointment Experience", guide: "Focus on booking, waiting time, or getting reports/prescriptions explained clearly." },
+        { role: "Solo Personal Care", guide: "Speaking strictly as an individual patient managing their own appointment." },
+        { role: "Accompanying Family Member", guide: "Came along with family or a relative. Focus on clean clinic environment and clear guidance." },
+        { role: "Short Practical Feedback", guide: "Direct 12-18 word feedback on doctor's explanation and overall visit." }
       ]
     };
   }
@@ -65,7 +65,7 @@ function getCategoryProfile(rawCategory: string) {
       defaultKeywords: ["dine-in", "family dinner", "seating area", "freshly prepared", "quick bite"],
       customKeywords,
       perspectives: [
-        { role: "First-time visitor", guide: "Tried dishes based on local recommendations." },
+        { role: "First-time diner", guide: "Tried dishes based on local recommendations." },
         { role: "Group diner", guide: "Meal with friends or family." }
       ]
     };
@@ -83,6 +83,25 @@ function getCategoryProfile(rawCategory: string) {
   };
 }
 
+// Function to clean and sanitize repetitive opening words like "Visited"
+function sanitizeReviewOpenings(reviews: string[], businessName: string): string[] {
+  return reviews.map((rev) => {
+    let cleaned = rev.trim();
+    
+    // Check if the review starts with "Visited" or "Visited here"
+    if (/^visited\b/i.test(cleaned)) {
+      // Replace starting "Visited [Business Name]" or "Visited here" with varied natural hooks
+      cleaned = cleaned
+        .replace(/^visited\s+here\s+(last\s+\w+|yesterday|recently)\b/i, 'Had an appointment $1')
+        .replace(/^visited\s+here\b/i, 'Came in for a checkup')
+        .replace(new RegExp(`^visited\\s+${businessName}\\b`, 'gi'), 'Had my appointment')
+        .replace(/^visited\b/i, 'Went in');
+    }
+
+    return cleaned;
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const { businessName, rating = 5, category = 'Business' } = await req.json();
@@ -97,40 +116,37 @@ export async function POST(req: Request) {
     const selectedKeywords = allKeywords.sort(() => 0.5 - Math.random()).slice(0, 3).join(", ");
     const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random()).slice(0, 3);
 
-    // Dynamic temperature seed to enforce maximum randomness
-    const randomTemp = Number((0.85 + Math.random() * 0.12).toFixed(2));
+    // Highly randomized temperature to break repetition
+    const randomTemp = Number((0.88 + Math.random() * 0.10).toFixed(2));
 
     const starNuance = rating <= 4 
-      ? "RATING IS 4 STARS: Include 1 minor realistic detail (e.g., 'parking was slightly tight', '10-min wait during peak hours', 'took a bit longer at the counter')." 
-      : "RATING IS 5 STARS: Positive, grounded experience without exaggerated fake praise.";
+      ? "RATING IS 4 STARS: Include 1 minor realistic detail (e.g., 'parking space was tight', 'a 10-minute wait during rush hour', 'reception counter was a bit busy')." 
+      : "RATING IS 5 STARS: Grounded positive experience without fake exaggeration.";
 
-    const prompt = `Generate 3 completely UNIQUE, organic, natural Google reviews for "${businessName}" (Category: ${category}).
+    const prompt = `Generate 3 completely DISTINCT, organic Google reviews for "${businessName}" (Category: ${category}).
 
 Selected Rating: ${rating} Stars.
 ${starNuance}
 
-SERVICE KEYWORDS TO MIX NATURALLY (Do NOT stuff or force into every review):
+KEYWORDS TO DISTRIBUTE NATURALLY (Do NOT force into every review):
 ${selectedKeywords}
 
-MANDATORY REVIEW PERSPECTIVES FOR THIS BATCH:
+PERSPECTIVES FOR THIS BATCH:
 - Review 1 (${selectedPerspectives[0].role}): ${selectedPerspectives[0].guide}
 - Review 2 (${selectedPerspectives[1].role}): ${selectedPerspectives[1].guide}
 - Review 3 (${selectedPerspectives[2].role}): ${selectedPerspectives[2].guide}
 
-STRICT ANTI-REPETITION & HUMAN DIVERSITY RULES:
-1. BANNED CLONED PHRASES (STRICTLY FORBIDDEN):
-   - DO NOT USE "found this team", "took my son", "took my daughter", "brought my son", "staff was nice", "explained everything", "overall satisfied", "highly recommended", "world-class", "best experience", "smooth experience", "excellent service", "top-notch".
+STRICT OPENING & SENTENCE VARIETY RULES (NEVER REPEAT OPENINGS):
+1. ABSOLUTE BAN ON THE WORD "VISITED" AT THE START:
+   - DO NOT START ANY REVIEW WITH "Visited...", "Visited here...", OR "Visited ${businessName}...". This word is STRICTLY BANNED as an opening word!
 
-2. VARY SENTENCE OPENINGS (DO NOT START WITH THE SAME WORDS):
-   - Vary the start of each review! Examples of diverse starts:
-     * Start with time: "Visited last Tuesday for...", "Had an appointment yesterday..."
-     * Start with action/reason: "Needed a routine checkup...", "Got my reports reviewed here..."
-     * Start with observation: "The clinic setup is clean...", "Booking an appointment was quick..."
-     * Start with direct opinion: "Decent experience overall...", "Quite impressed with how..."
-   - DO NOT start consecutive reviews with "I", "Took my...", or "Found this...".
+2. ROTATE OPENING STYLES ACROSS THE 3 REVIEWS:
+   - Review 1 MUST start with a condition, issue, or reason (e.g., "Needed a second opinion on...", "Had a toothache since two days...", "Got my routine checkup done...")
+   - Review 2 MUST start with an observation or clinic note (e.g., "The appointment system was smooth...", "Clean premises and polite reception...", "Dr. explained everything patiently...")
+   - Review 3 MUST start directly with time or a short verdict (e.g., "Came in yesterday around...", "Decent experience overall...", "Quick 20-minute consultation...")
 
-3. ZERO TEMPLATED PATTERNS:
-   - Do NOT construct reviews using the same formula [Person + Action + Praise]. Write each review in a completely different writing style, sentence length, and vocabulary.
+3. BANNED REPETITIVE PHRASES:
+   - "found this team", "took my son", "took my daughter", "brought my son", "staff was nice", "explained everything", "overall satisfied", "highly recommended", "world-class", "best experience", "smooth experience", "excellent service", "top-notch".
 
 4. NAME & CATEGORY FREQUENCY:
    - Mention "${businessName}" or "${category}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
@@ -145,7 +161,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       messages: [
         {
           role: 'system',
-          content: 'You write completely distinct, non-repetitive, raw human Google reviews. NEVER reuse sentence structures or recurring phrases across outputs.',
+          content: 'You write raw, non-repetitive, unpolished Google reviews. You NEVER start reviews with the word "Visited". Output ONLY a valid JSON array of strings.',
         },
         {
           role: 'user',
@@ -165,11 +181,14 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
 
     let reviews: string[] = JSON.parse(cleanedContent);
 
+    // Apply safety sanitization filter to catch and convert any accidental "Visited" openings
     if (Array.isArray(reviews)) {
+      reviews = sanitizeReviewOpenings(reviews, businessName);
+
       reviews = reviews.map((rev) => {
         const words = rev.trim().split(/\s+/);
         if (words.length < 8) {
-          return `${rev.trim()} Decent experience with the consultation.`;
+          return `${rev.trim()} Decent experience with the doctor's consultation.`;
         }
         return rev.trim();
       });
