@@ -5,76 +5,79 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
-// Real-world observational details based on category
-function getCategoryAngles(category: string): string[] {
+// Category-specific keywords and realistic service context (e.g., Dental, Tech, Dining)
+function getCategoryContext(category: string) {
   const cat = (category || '').toLowerCase();
 
-  if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('digital') || cat.includes('web') || cat.includes('agency')) {
-    return [
-      "explained things simply without confusing jargon",
-      "fixed our issue faster than expected",
-      "clear communication on calls and messages",
-      "fair pricing and transparent updates",
-      "took time to understand what we actually needed"
-    ];
+  if (cat.includes('dental') || cat.includes('dentist') || cat.includes('teeth')) {
+    return {
+      keywords: ["braces", "aligners", "orthodontic treatment", "dental care", "consultation", "root canal", "teeth cleaning", "checkup"],
+      angles: [
+        "was a bit anxious before the procedure but felt okay during the visit",
+        "came in with my daughter for her routine teeth checkup",
+        "doctor took time during consultation to review X-rays and options",
+        "cleared all my doubts regarding treatment duration and cost"
+      ]
+    };
+  }
+
+  if (cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor')) {
+    return {
+      keywords: ["consultation", "prescribed medicine", "reports checkup", "routine visit", "treatment plan", "medical checkup"],
+      angles: [
+        "brought my dadu here for his routine checkup",
+        "doctor listened to the symptoms patiently without rushing",
+        "came with my masi ji for a second opinion",
+        "reception process was straightforward and reports came on time"
+      ]
+    };
+  }
+
+  if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('web') || cat.includes('agency')) {
+    return {
+      keywords: ["website redesign", "bug fixes", "UI cleanup", "SEO audit", "app development", "hosting setup", "domain transfer"],
+      angles: [
+        "got our business website redesigned and speed improved noticeably",
+        "team was responsive on WhatsApp whenever we requested small changes",
+        "fair pricing for the technical work delivered",
+        "handled our project updates smoothly over the last two months"
+      ]
+    };
   }
 
   if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery')) {
-    return [
-      "food tasted fresh and portion size was decent",
-      "didn't have to wait too long after ordering",
-      "clean seating area and quiet vibe",
-      "reasonably priced for the quality",
-      "straightforward service, decent option"
-    ];
+    return {
+      keywords: ["family dinner", "cold coffee", "thali", "evening snack", "seating area", "table booking", "freshly prepared"],
+      angles: [
+        "went with family on Sunday evening, food was fresh",
+        "portion sizes were generous and taste was balanced",
+        "took around 20 mins for food to arrive as it was crowded",
+        "casual atmosphere, good option for dinner with friends"
+      ]
+    };
   }
 
-  if (cat.includes('salon') || cat.includes('spa') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('dental')) {
-    return [
-      "staff answered my questions patiently",
-      "clean waiting area with reasonable wait times",
-      "explained treatment steps before starting",
-      "straightforward process from check-in to leaving",
-      "post-care guidance was simple to follow"
-    ];
-  }
-
-  return [
-    "quick response when reaching out",
-    "straightforward process with clear answers",
-    "good quality work done on schedule",
-    "fair pricing and polite staff",
-    "handled the work without unnecessary delay"
-  ];
+  // General Retail / Service fallback
+  return {
+    keywords: ["service charge", "in-store visit", "billing", "product demo", "work quality", "delivery time"],
+    angles: [
+      "visited for a quick service inquiry last week",
+      "straightforward billing and helpful guidance",
+      "got the job done without unnecessary delays",
+      "came on recommendation from a family friend"
+    ]
+  };
 }
 
-// 5 Specific Customer Perspectives requested
-function getRandomPerspectives() {
+// Scenarios to inject realistic variety into each review batch
+function getRandomScenarios() {
   const pool = [
-    {
-      role: "First-time visitor",
-      guide: "Focus on finding the location, initial impressions, or overcoming slight hesitation."
-    },
-    {
-      role: "Regular patient/client",
-      guide: "Mentions coming here regularly, routine visits, or consistency over time."
-    },
-    {
-      role: "Parent of child patient/family member",
-      guide: "Writing as someone who brought their child or family member (e.g., 'Brought my son here...', 'Took my mother...')."
-    },
-    {
-      role: "Consultation visitor",
-      guide: "Focus on asking questions, getting a second opinion, or reviewing reports before deciding."
-    },
-    {
-      role: "Treatment / Main service patient",
-      guide: "Describes going through a specific service/procedure, recovery, or post-care follow-up."
-    },
-    {
-      role: "Short casual reviewer",
-      guide: "Direct, brief (12-22 words). Speaks like sending a quick text message."
-    }
+    { type: "First-time visit", instruction: "Customer visiting for the first time, mentioning how they found out or initial hesitation." },
+    { type: "Family visit (Indian context)", instruction: "Occasionally reference family naturally (e.g., 'brought my son', 'came with my masi ji', 'took dadu for checkup')." },
+    { type: "Consultation & Questions", instruction: "Customer asking questions or getting advice/opinions before deciding on treatment/service." },
+    { type: "Regular/Follow-up Customer", instruction: "Mentions a second or third visit, or ongoing treatment/service experience." },
+    { type: "Nervous to comfortable journey", instruction: "Was slightly nervous or skeptical at first, but had a normal/reassuring experience." },
+    { type: "Short casual reviewer", instruction: "Brief 12-18 words Indian English review. Practical and direct." }
   ];
 
   return [...pool].sort(() => 0.5 - Math.random()).slice(0, 3);
@@ -82,44 +85,56 @@ function getRandomPerspectives() {
 
 export async function POST(req: Request) {
   try {
-    const { businessName, rating, category } = await req.json();
+    const { businessName, rating = 5, category = '' } = await req.json();
 
     if (!process.env.GROQ_API_KEY) {
       console.error('GROQ_API_KEY missing in Environment Variables');
       return NextResponse.json({ error: 'Groq API Key not configured' }, { status: 500 });
     }
 
-    const availableAngles = getCategoryAngles(category);
-    const selectedAngles = [...availableAngles].sort(() => 0.5 - Math.random()).slice(0, 3).join(", ");
-    const perspectives = getRandomPerspectives();
+    const { keywords, angles } = getCategoryContext(category);
+    const selectedKeywords = [...keywords].sort(() => 0.5 - Math.random()).slice(0, 3).join(", ");
+    const selectedAngles = [...angles].sort(() => 0.5 - Math.random()).slice(0, 2).join("; ");
+    const scenarios = getRandomScenarios();
 
-    const prompt = `Act as 3 REAL everyday customers writing organic Google reviews for "${businessName}" (Category: ${category}).
+    const starNuance = rating <= 4 
+      ? "RATING IS 4 STARS: Include 1 minor realistic detail or tiny limitation (e.g., 'parking was slightly tight', 'had a 10-min wait during peak hours', 'billing counter was a bit busy')." 
+      : "RATING IS 5 STARS: Genuinely positive experience. Do NOT sound exaggerated, promotional, or fake.";
+
+    const prompt = `Generate 3 completely organic, human-sounding Google reviews for "${businessName}" (Business Category: ${category}).
 
 Selected Rating: ${rating} Stars.
-Observation details to distribute naturally: ${selectedAngles}.
+${starNuance}
 
-MANDATORY PERSPECTIVES TO USE:
-- Review 1 (${perspectives[0].role}): ${perspectives[0].guide}
-- Review 2 (${perspectives[1].role}): ${perspectives[1].guide}
-- Review 3 (${perspectives[2].role}): ${perspectives[2].guide}
+CATEGORY KEYWORDS TO USE NATURALLY (Do NOT force all into one review, spread across batch):
+${selectedKeywords}
 
-STRICT WRITING RULES:
-1. STRICTLY BANNED WORDS/PHRASES (DO NOT USE):
-   - "comfortable", "smooth", "excellent", "professional", "highly recommended", "world-class", "best experience", "pinnacle", "top-notch", "delighted".
+CONTEXT & ANGLES TO DRAW INSPIRATION FROM:
+${selectedAngles}
 
-2. AVOID PROMOTIONAL / ADVERTISEMENT ENDINGS:
-   - DO NOT end reviews with fake praise or recommendations like "Must visit!", "I will definitely recommend to everyone!".
-   - End naturally like real humans: "Everything was straightforward", "Glad to have this wrapped up finally", "Left within 30 minutes", "No issues".
+MANDATORY REVIEW SCENARIOS FOR THIS BATCH:
+- Review 1 (${scenarios[0].type}): ${scenarios[0].instruction}
+- Review 2 (${scenarios[1].type}): ${scenarios[1].instruction}
+- Review 3 (${scenarios[2].type}): ${scenarios[2].instruction}
 
-3. REAL HUMAN IMPERFECTIONS & VARIATIONS:
-   - Use simple everyday language with minor human details (e.g., "was a bit nervous at first", "10-15 min wait", "parking was a little tricky").
-   - Do NOT use perfect marketing grammar or overly polished sentences.
+STRICT INDIAN ENGLISH & HUMAN AUTHENTICITY RULES:
+1. INDIAN ENGLISH CONTEXT:
+   - Use natural Indian English vocabulary and phrasing (e.g., "came for checkup", "got the work done", "staff was humble", "took my parents", "masi ji", "dadu", "son").
+   - Avoid Americanized phrases like "super excited", "blown away", "world-class", "game changer".
 
-4. DO NOT OVERUSE BUSINESS NAME:
-   - Do NOT repeat "${businessName}" in every review. Real people usually write "this place", "the doctor", "they", "the team", or "here".
+2. ABSOLUTELY BANNED REPETITIVE AI PHRASES (STRICTLY FORBIDDEN):
+   - Do NOT use: "staff was nice", "explained everything", "overall satisfied", "highly recommended", "best experience", "smooth experience", "comfortable environment", "excellent service", "top-notch".
 
-5. LENGTH MIX:
-   - Mix short (12-20 words) and medium (25-45 words) length reviews.
+3. ENDINGS MUST BE NATURAL:
+   - Do NOT end every review with a recommendation or advertisement.
+   - Real humans end with simple statements: "Got my work done on time", "Left within 45 mins", "Glad we opted for this clinic", "Will visit again if needed".
+
+4. VARIETY IN STRUCTURE:
+   - Mix short (12-22 words) and medium (25-45 words) lengths.
+   - Vary sentence starting words. Do NOT start all reviews with "I".
+
+5. NO KEYWORD STUFFING:
+   - Integrate relevant service keywords naturally like a customer sharing a real story.
 
 Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
 
@@ -127,7 +142,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       messages: [
         {
           role: 'system',
-          content: 'You write unpolished, natural, raw human Google reviews based on realistic customer experiences. Output ONLY a valid JSON array of strings without markdown syntax or intro conversational text.',
+          content: 'You write raw, realistic Indian customer Google reviews. Output ONLY a valid JSON array of strings without markdown syntax or intro text.',
         },
         {
           role: 'user',
@@ -135,7 +150,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
         },
       ],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.9,
+      temperature: 0.88,
     });
 
     const content = chatCompletion.choices[0]?.message?.content || '[]';
@@ -152,7 +167,7 @@ Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Revi
       reviews = reviews.map((rev) => {
         const words = rev.trim().split(/\s+/);
         if (words.length < 8) {
-          return `${rev.trim()} Overall satisfied with my visit today.`;
+          return `${rev.trim()} Decent experience overall during my visit.`;
         }
         return rev.trim();
       });
