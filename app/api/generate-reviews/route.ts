@@ -26,7 +26,7 @@ function parseCategoriesAndKeywords(rawCategory: string): string[] {
   if (!rawCategory) return [];
   return rawCategory
     .split(/[,/|]+/)
-    .map(item => item.trim())
+    .map((item) => item.trim())
     .filter(Boolean);
 }
 
@@ -169,7 +169,8 @@ export async function POST(req: Request) {
     const p2 = selectedPerspectives[1] ? `${selectedPerspectives[1].role}: ${selectedPerspectives[1].guide}` : "Service quality note";
     const p3 = selectedPerspectives[2] ? `${selectedPerspectives[2].role}: ${selectedPerspectives[2].guide}` : "Quick visitor note";
 
-    const randomTemp = Number((0.85 + Math.random() * 0.10).toFixed(2));
+    // Standardized safe temperature (Max 0.9)
+    const randomTemp = Number((0.70 + Math.random() * 0.20).toFixed(2));
     const uniqueSessionSeed = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
     const starNuance = rating <= 4 
@@ -209,17 +210,18 @@ STRICT LANGUAGE & HUMAN-WRITING RULES:
 4. BUSINESS NAME RULE:
    - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
 
-Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
+OUTPUT FORMAT REQUIREMENTS:
+Return your response ONLY as a JSON array of 3 strings. Example format:
+["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
 
     let chatCompletion;
     
-    // Active Model: llama-3.3-70b-versatile
     try {
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
           {
             role: 'system',
-            content: 'You generate short casual English Google reviews. Respond ONLY with a valid JSON array of string reviews.',
+            content: 'You generate short casual English Google reviews. Respond ONLY in raw JSON format.',
           },
           {
             role: 'user',
@@ -228,16 +230,16 @@ Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Rev
         ],
         model: 'llama-3.3-70b-versatile',
         temperature: randomTemp,
+        max_tokens: 1024,
       });
     } catch (primaryErr: any) {
       console.warn('Primary model llama-3.3-70b-versatile failed, attempting fallback to llama-3.2-3b-preview:', primaryErr?.message || primaryErr);
       
-      // Fallback: llama-3.2-3b-preview
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
           {
             role: 'system',
-            content: 'You generate short casual English Google reviews. Respond ONLY with a valid JSON array of string reviews.',
+            content: 'You generate short casual English Google reviews. Respond ONLY in raw JSON format.',
           },
           {
             role: 'user',
@@ -246,6 +248,7 @@ Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Rev
         ],
         model: 'llama-3.2-3b-preview',
         temperature: randomTemp,
+        max_tokens: 1024,
       });
     }
 
