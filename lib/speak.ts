@@ -8,25 +8,46 @@ export function playHindiVoiceInstruction(): void {
     // Stop any currently playing audio to prevent overlapping or queued messages
     window.speechSynthesis.cancel();
 
-    const text = "Kripya apne hisab se sahi review chuniye. Click karte hi yeh copy ho jayega, bas ise comment section me paste karke post kar dein.";
+    // Neutral Script: Guides the user to pick whichever review matches their experience
+    const text = "Aapko jo review sabse sahi lage, use chuniye. Click karte hi yeh copy ho jayega, phir comment section me paste karke post kar dein.";
     const utterance = new SpeechSynthesisUtterance(text);
 
     utterance.lang = 'hi-IN';
-    utterance.rate = 0.9; // Slightly slower speed for clearer pronunciation
+    utterance.rate = 0.88; // Slightly relaxed pace for clarity
+    utterance.pitch = 1.0;
 
-    // Attempt to select an explicit Hindi voice if installed in user's browser/OS
-    const voices = window.speechSynthesis.getVoices();
-    const hindiVoice = voices.find(
-      (v) => v.lang === 'hi-IN' || v.lang.toLowerCase().startsWith('hi')
-    );
-    
-    if (hindiVoice) {
-      utterance.voice = hindiVoice;
+    const speakWithBestVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      
+      // Look specifically for Hindi (India) or English (India) voices for a natural accent
+      const indianVoice = voices.find(
+        (v) =>
+          v.lang === 'hi-IN' ||
+          v.lang === 'en-IN' ||
+          v.lang.toLowerCase().includes('hi_in') ||
+          v.name.toLowerCase().includes('hindi') ||
+          v.name.toLowerCase().includes('india')
+      );
+
+      if (indianVoice) {
+        utterance.voice = indianVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    // Browsers like Chrome load voices asynchronously; handle this gracefully
+    const availableVoices = window.speechSynthesis.getVoices();
+    if (availableVoices.length > 0) {
+      speakWithBestVoice();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        speakWithBestVoice();
+        window.speechSynthesis.onvoiceschanged = null; // Clean up handler
+      };
     }
-
-    window.speechSynthesis.speak(utterance);
   } catch (error) {
-    // Fail silently so it never interrupts the UI or review generation
+    // Fail silently so UI interaction is never interrupted
     console.warn('Speech synthesis non-fatal error:', error);
   }
 }
