@@ -5,6 +5,7 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
+// Cache available model IDs in memory per container runtime
 let cachedModelId: string | null = null;
 
 async function getAvailableModel(): Promise<string> {
@@ -14,7 +15,7 @@ async function getAvailableModel(): Promise<string> {
     const modelsList = await groq.models.list();
     const availableIds = modelsList.data.map((m: any) => m.id);
 
-    // Active production models supported by Groq
+    // Preferred active production models on Groq
     const preferredOrder = [
       'llama-3.3-70b-versatile',
       'llama-3.1-8b-instant',
@@ -30,7 +31,7 @@ async function getAvailableModel(): Promise<string> {
       }
     }
 
-    // Dynamic selection: pick the first available text generation model
+    // Dynamic fallback: select first available text generation model
     const dynamicModel = availableIds.find(
       (id: string) => !id.includes('whisper') && !id.includes('vision') && !id.includes('guard')
     );
@@ -40,13 +41,14 @@ async function getAvailableModel(): Promise<string> {
       return dynamicModel;
     }
   } catch (err) {
-    console.warn('Failed to fetch active Groq models list:', err);
+    console.warn('Failed to fetch dynamic model list from Groq:', err);
   }
 
-  // Active baseline model
-  return 'llama-3.3-70b-versatile';
+  // Baseline fallback model
+  return 'llama-3.1-8b-instant';
 }
 
+// Retry helper for handling Groq 429 Rate Limit errors with exponential backoff
 async function createGroqCompletionWithRetry(groqClient: any, params: any, retries = 3, delay = 1500) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -63,11 +65,12 @@ async function createGroqCompletionWithRetry(groqClient: any, params: any, retri
   }
 }
 
+// Helper to extract and clean comma/slash separated keywords from category input
 function parseCategoriesAndKeywords(rawCategory: string): string[] {
   if (!rawCategory) return [];
   return rawCategory
     .split(/[,/|]+/)
-    .map((item) => item.trim())
+    .map(item => item.trim())
     .filter(Boolean);
 }
 
@@ -75,6 +78,7 @@ function getCategoryProfile(rawCategory: string) {
   const cat = (rawCategory || '').toLowerCase();
   const parsedKeywords = parseCategoriesAndKeywords(rawCategory);
 
+  // 1. HEALTHCARE / CLINIC / DENTAL / HOSPITAL
   if (cat.includes('dental') || cat.includes('dentist') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('physio') || cat.includes('eye')) {
     return {
       type: 'healthcare',
@@ -90,6 +94,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 2. SECURITY / CCTV / SURVEILLANCE
   if (cat.includes('cctv') || cat.includes('security') || cat.includes('biometric') || cat.includes('fire alarm') || cat.includes('surveillance')) {
     return {
       type: 'security_tech',
@@ -103,6 +108,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 3. IT / TECH / AGENCIES
   if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('digital') || cat.includes('web') || cat.includes('agency')) {
     return {
       type: 'b2b_tech',
@@ -115,6 +121,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 4. RESTAURANTS / FOOD
   if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery')) {
     return {
       type: 'food',
@@ -127,6 +134,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 5. GENERAL SERVICES
   return {
     type: 'general',
     defaultKeywords: ["in-store visit", "billing", "work quality", "delivery time"],
@@ -137,6 +145,7 @@ function getCategoryProfile(rawCategory: string) {
   };
 }
 
+// Post-processing Sanitizer to remove leaks & any non-English/Hinglish remnants
 function sanitizeReviewContent(reviews: string[], categoryType: string): string[] {
   const commonBannedPhrases = [
     { pattern: /^doctor was good\b/i, replacement: 'Clear advice provided' },
@@ -146,6 +155,7 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
     { pattern: /staff was nice\b/i, replacement: 'everyone was polite' },
   ];
 
+  // Regex to strip out common accidental Hinglish words
   const hinglishCleaner = /\b(accha|achha|bohot|bahut|badiya|sahi|hai|ho|gaya|kar|diya|chahiye|wala|wali|wale|karo|plz)\b/gi;
 
   return reviews.map((rev) => {
@@ -165,6 +175,7 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
   });
 }
 
+// Robust JSON extraction helper supporting raw arrays or JSON objects
 function extractJsonArray(rawText: string): string[] {
   try {
     const parsed = JSON.parse(rawText);
@@ -209,7 +220,7 @@ export async function POST(req: Request) {
     const p2 = selectedPerspectives[1] ? `${selectedPerspectives[1].role}: ${selectedPerspectives[1].guide}` : "Service quality note";
     const p3 = selectedPerspectives[2] ? `${selectedPerspectives[2].role}: ${selectedPerspectives[2].guide}` : "Quick visitor note";
 
-    const randomTemp = Number((0.70 + Math.random() * 0.15).toFixed(2));
+    const randomTemp = Number((0.95 + Math.random() * 0.12).toFixed(2));
     const uniqueSessionSeed = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
     const starNuance = rating <= 4 
@@ -236,22 +247,33 @@ REVIEW PERSPECTIVES FOR THIS BATCH:
 - Review 3: ${p3}
 
 STRICT LANGUAGE & HUMAN-WRITING RULES:
-1. 100% PURE ENGLISH ONLY.
-2. NATURAL OPENINGS & HIGH VARIETY.
-3. SIMPLE CASUAL WRITING STYLE.
-4. BUSINESS NAME RULE: Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
+1. 100% PURE ENGLISH ONLY:
+   - WRITE EXCLUSIVELY IN STANDARD ENGLISH.
+   - ABSOLUTELY NO HINDI, NO HINGLISH, AND NO TRANSLITERATED WORDS (e.g., NEVER use 'bohot', 'accha', 'hai', 'gaya', 'kar', etc.).
 
-OUTPUT REQUIREMENT:
-You must respond using valid JSON. Format your response strictly as a JSON object containing a single key "reviews" with an array of 3 string items:
-{"reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."]}`;
+2. NATURAL OPENINGS & HIGH VARIETY:
+   - Let each review start completely naturally in its own unique way.
+   - DO NOT follow a fixed starting template. Each of the 3 reviews MUST start with a totally different word and sentence structure.
+   - Avoid generic cliché starters like "Great experience", "I went to", or "Visited here".
 
+3. SIMPLE CASUAL WRITING STYLE:
+   - Simple daily conversational English. Short, natural sentences.
+   - NO IELTS/fancy words (avoid: "seamless", "impeccable", "top-notch", "exceptional", "proficiency", "consultation").
+
+4. BUSINESS NAME RULE:
+   - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
+   - For the other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
+
+Return ONLY a valid raw JSON array containing exactly 3 strings. Example: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
+
+    // Dynamically retrieve an available model ID from Groq
     const activeModel = await getAvailableModel();
 
     const chatCompletion = await createGroqCompletionWithRetry(groq, {
       messages: [
         {
           role: 'system',
-          content: 'You generate short casual English Google reviews. You must output valid JSON.',
+          content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a valid JSON array of strings in pure English.',
         },
         {
           role: 'user',
@@ -259,13 +281,17 @@ You must respond using valid JSON. Format your response strictly as a JSON objec
         },
       ],
       model: activeModel,
-      response_format: { type: 'json_object' },
       temperature: randomTemp,
-      max_tokens: 1024,
     });
 
-    const content = chatCompletion?.choices[0]?.message?.content || '{"reviews":[]}';
-    let reviews: string[] = extractJsonArray(content);
+    const content = chatCompletion?.choices[0]?.message?.content || '[]';
+    
+    const cleanedContent = content
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    let reviews: string[] = extractJsonArray(cleanedContent);
 
     if (Array.isArray(reviews) && reviews.length > 0) {
       reviews = sanitizeReviewContent(reviews, profile.type);
@@ -287,7 +313,8 @@ You must respond using valid JSON. Format your response strictly as a JSON objec
 
     return NextResponse.json({ reviews });
   } catch (error: unknown) {
-    console.error('Groq API Final Exception:', error);
+    console.error('Groq API Error:', error);
+    // Invalidate cached model on failure so the next request gets a fresh active list
     cachedModelId = null;
 
     const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
