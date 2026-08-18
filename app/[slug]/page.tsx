@@ -97,7 +97,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
       } catch (err) {
         console.error('Error fetching business:', err);
         setNotFound(true);
-      } font-medium {
+      } finally {
         setLoadingBusiness(false);
       }
     }
