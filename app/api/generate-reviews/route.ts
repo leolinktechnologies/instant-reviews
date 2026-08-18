@@ -5,7 +5,6 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
-// Retry helper for handling Groq 429 Rate Limit errors with exponential backoff
 async function createGroqCompletionWithRetry(groqClient: any, params: any, retries = 3, delay = 1500) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -158,7 +157,6 @@ export async function POST(req: Request) {
     }
 
     const { businessName = 'Business', rating = 5, category = 'Business' } = body;
-
     const profile = getCategoryProfile(category);
     
     const allCategoryKeywords = [...new Set([...profile.parsedKeywords, ...profile.defaultKeywords])].sort(() => 0.5 - Math.random());
@@ -169,8 +167,7 @@ export async function POST(req: Request) {
     const p2 = selectedPerspectives[1] ? `${selectedPerspectives[1].role}: ${selectedPerspectives[1].guide}` : "Service quality note";
     const p3 = selectedPerspectives[2] ? `${selectedPerspectives[2].role}: ${selectedPerspectives[2].guide}` : "Quick visitor note";
 
-    // Standardized safe temperature (Max 0.9)
-    const randomTemp = Number((0.70 + Math.random() * 0.20).toFixed(2));
+    const randomTemp = Number((0.70 + Math.random() * 0.15).toFixed(2));
     const uniqueSessionSeed = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
     const starNuance = rating <= 4 
@@ -197,22 +194,14 @@ REVIEW PERSPECTIVES FOR THIS BATCH:
 - Review 3: ${p3}
 
 STRICT LANGUAGE & HUMAN-WRITING RULES:
-1. 100% PURE ENGLISH ONLY:
-   - WRITE EXCLUSIVELY IN STANDARD ENGLISH.
-   - ABSOLUTELY NO HINDI, NO HINGLISH, AND NO TRANSLITERATED WORDS.
+1. 100% PURE ENGLISH ONLY.
+2. NATURAL OPENINGS & HIGH VARIETY.
+3. SIMPLE CASUAL WRITING STYLE.
+4. BUSINESS NAME RULE: Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
 
-2. NATURAL OPENINGS & HIGH VARIETY:
-   - Let each review start naturally in its own unique way. Avoid generic cliché starters like "Great experience" or "Visited here".
-
-3. SIMPLE CASUAL WRITING STYLE:
-   - Simple daily conversational English. Short, natural sentences.
-
-4. BUSINESS NAME RULE:
-   - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
-
-OUTPUT FORMAT REQUIREMENTS:
-Return your response ONLY as a JSON array of 3 strings. Example format:
-["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
+OUTPUT REQUIREMENT:
+You must respond using valid JSON. Format your response strictly as a JSON object containing a single key "reviews" with an array of 3 string items:
+{"reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."]}`;
 
     let chatCompletion;
     
@@ -221,7 +210,7 @@ Return your response ONLY as a JSON array of 3 strings. Example format:
         messages: [
           {
             role: 'system',
-            content: 'You generate short casual English Google reviews. Respond ONLY in raw JSON format.',
+            content: 'You generate short casual English Google reviews. You must output valid JSON.',
           },
           {
             role: 'user',
@@ -229,37 +218,33 @@ Return your response ONLY as a JSON array of 3 strings. Example format:
           },
         ],
         model: 'llama-3.3-70b-versatile',
+        response_format: { type: 'json_object' },
         temperature: randomTemp,
         max_tokens: 1024,
       });
     } catch (primaryErr: any) {
-      console.warn('Primary model llama-3.3-70b-versatile failed, attempting fallback to llama-3.2-3b-preview:', primaryErr?.message || primaryErr);
+      console.warn('Primary model error, executing fallback:', primaryErr?.message || primaryErr);
       
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
           {
             role: 'system',
-            content: 'You generate short casual English Google reviews. Respond ONLY in raw JSON format.',
+            content: 'You generate short casual English Google reviews. You must output valid JSON.',
           },
           {
             role: 'user',
             content: prompt,
           },
         ],
-        model: 'llama-3.2-3b-preview',
+        model: 'llama-3.1-8b-instant',
+        response_format: { type: 'json_object' },
         temperature: randomTemp,
         max_tokens: 1024,
       });
     }
 
-    const content = chatCompletion?.choices[0]?.message?.content || '[]';
-    
-    const cleanedContent = content
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
-
-    let reviews: string[] = extractJsonArray(cleanedContent);
+    const content = chatCompletion?.choices[0]?.message?.content || '{"reviews":[]}';
+    let reviews: string[] = extractJsonArray(content);
 
     if (Array.isArray(reviews) && reviews.length > 0) {
       reviews = sanitizeReviewContent(reviews, profile.type);
@@ -281,7 +266,7 @@ Return your response ONLY as a JSON array of 3 strings. Example format:
 
     return NextResponse.json({ reviews });
   } catch (error: unknown) {
-    console.error('Groq API Error Details:', error);
+    console.error('Groq API Final Exception:', error);
     const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
     return NextResponse.json(
       { error: errorMsg },
