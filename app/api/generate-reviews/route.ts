@@ -223,7 +223,7 @@ You must respond using valid JSON. Format your response strictly as a JSON objec
         max_tokens: 1024,
       });
     } catch (primaryErr: any) {
-      console.warn('Primary model error, attempting fallback to llama-3.2-3b-preview:', primaryErr?.message || primaryErr);
+      console.warn('Primary model error, attempting fallback to mixtral-8x7b-32768:', primaryErr?.message || primaryErr);
       
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
@@ -236,7 +236,7 @@ You must respond using valid JSON. Format your response strictly as a JSON objec
             content: prompt,
           },
         ],
-        model: 'llama-3.2-3b-preview',
+        model: 'mixtral-8x7b-32768',
         response_format: { type: 'json_object' },
         temperature: randomTemp,
         max_tokens: 1024,
