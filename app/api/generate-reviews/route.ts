@@ -5,6 +5,49 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
+// Cache available model IDs in memory per container runtime
+let cachedModelId: string | null = null;
+
+async function getAvailableModel(): Promise<string> {
+  if (cachedModelId) return cachedModelId;
+
+  try {
+    const modelsList = await groq.models.list();
+    const availableIds = modelsList.data.map((m: any) => m.id);
+
+    // Preferred hierarchy of models
+    const preferredOrder = [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-70b-versatile',
+      'llama3-70b-8192',
+      'llama-3.1-8b-instant',
+      'mixtral-8x7b-32768'
+    ];
+
+    for (const model of preferredOrder) {
+      if (availableIds.includes(model)) {
+        cachedModelId = model;
+        return model;
+      }
+    }
+
+    // Default to the first available non-whisper/non-vision text model
+    const fallbackModel = availableIds.find(
+      (id: string) => !id.includes('whisper') && !id.includes('vision')
+    );
+
+    if (fallbackModel) {
+      cachedModelId = fallbackModel;
+      return fallbackModel;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch dynamic model list from Groq:', err);
+  }
+
+  // Hard fallback baseline
+  return 'llama-3.1-70b-versatile';
+}
+
 async function createGroqCompletionWithRetry(groqClient: any, params: any, retries = 3, delay = 1500) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -203,45 +246,24 @@ OUTPUT REQUIREMENT:
 You must respond using valid JSON. Format your response strictly as a JSON object containing a single key "reviews" with an array of 3 string items:
 {"reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."]}`;
 
-    let chatCompletion;
-    
-    try {
-      chatCompletion = await createGroqCompletionWithRetry(groq, {
-        messages: [
-          {
-            role: 'system',
-            content: 'You generate short casual English Google reviews. You must output valid JSON.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        model: 'llama-3.3-70b-versatile',
-        response_format: { type: 'json_object' },
-        temperature: randomTemp,
-        max_tokens: 1024,
-      });
-    } catch (primaryErr: any) {
-      console.warn('Primary model error, attempting fallback to llama3-70b-8192:', primaryErr?.message || primaryErr);
-      
-      chatCompletion = await createGroqCompletionWithRetry(groq, {
-        messages: [
-          {
-            role: 'system',
-            content: 'You generate short casual English Google reviews. You must output valid JSON.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        model: 'llama3-70b-8192',
-        response_format: { type: 'json_object' },
-        temperature: randomTemp,
-        max_tokens: 1024,
-      });
-    }
+    const activeModel = await getAvailableModel();
+
+    const chatCompletion = await createGroqCompletionWithRetry(groq, {
+      messages: [
+        {
+          role: 'system',
+          content: 'You generate short casual English Google reviews. You must output valid JSON.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      model: activeModel,
+      response_format: { type: 'json_object' },
+      temperature: randomTemp,
+      max_tokens: 1024,
+    });
 
     const content = chatCompletion?.choices[0]?.message?.content || '{"reviews":[]}';
     let reviews: string[] = extractJsonArray(content);
@@ -267,6 +289,9 @@ You must respond using valid JSON. Format your response strictly as a JSON objec
     return NextResponse.json({ reviews });
   } catch (error: unknown) {
     console.error('Groq API Final Exception:', error);
+    // Reset cache on failure so next request pulls fresh models list
+    cachedModelId = null;
+
     const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
     return NextResponse.json(
       { error: errorMsg },
