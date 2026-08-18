@@ -5,13 +5,14 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
+// Retry helper for handling Groq 429 Rate Limit errors with exponential backoff
 async function createGroqCompletionWithRetry(groqClient: any, params: any, retries = 3, delay = 1500) {
   for (let i = 0; i < retries; i++) {
     try {
       return await groqClient.chat.completions.create(params);
     } catch (err: any) {
       if (err?.status === 429 && i < retries - 1) {
-        console.warn(`Groq 429 Rate Limit hit. Retrying in ${delay}ms...`);
+        console.warn(`Groq 429 Rate Limit hit. Retrying in ${delay}ms... (Attempt ${i + 1} of ${retries})`);
         await new Promise((res) => setTimeout(res, delay));
         delay *= 2;
       } else {
@@ -21,6 +22,7 @@ async function createGroqCompletionWithRetry(groqClient: any, params: any, retri
   }
 }
 
+// Helper to extract and clean comma/slash separated keywords from category input
 function parseCategoriesAndKeywords(rawCategory: string): string[] {
   if (!rawCategory) return [];
   return rawCategory
@@ -33,6 +35,7 @@ function getCategoryProfile(rawCategory: string) {
   const cat = (rawCategory || '').toLowerCase();
   const parsedKeywords = parseCategoriesAndKeywords(rawCategory);
 
+  // 1. HEALTHCARE / CLINIC / DENTAL / HOSPITAL
   if (cat.includes('dental') || cat.includes('dentist') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('physio') || cat.includes('eye')) {
     return {
       type: 'healthcare',
@@ -48,6 +51,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 2. SECURITY / CCTV / SURVEILLANCE
   if (cat.includes('cctv') || cat.includes('security') || cat.includes('biometric') || cat.includes('fire alarm') || cat.includes('surveillance')) {
     return {
       type: 'security_tech',
@@ -61,6 +65,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 3. IT / TECH / AGENCIES
   if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('digital') || cat.includes('web') || cat.includes('agency')) {
     return {
       type: 'b2b_tech',
@@ -73,6 +78,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 4. RESTAURANTS / FOOD
   if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery')) {
     return {
       type: 'food',
@@ -85,6 +91,7 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
+  // 5. GENERAL SERVICES
   return {
     type: 'general',
     defaultKeywords: ["in-store visit", "billing", "work quality", "delivery time"],
@@ -95,6 +102,7 @@ function getCategoryProfile(rawCategory: string) {
   };
 }
 
+// Post-processing Sanitizer to remove leaks & any non-English/Hinglish remnants
 function sanitizeReviewContent(reviews: string[], categoryType: string): string[] {
   const commonBannedPhrases = [
     { pattern: /^doctor was good\b/i, replacement: 'Clear advice provided' },
@@ -107,7 +115,7 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
   const hinglishCleaner = /\b(accha|achha|bohot|bahut|badiya|sahi|hai|ho|gaya|kar|diya|chahiye|wala|wali|wale|karo|plz)\b/gi;
 
   return reviews.map((rev) => {
-    let cleaned = rev.trim();
+    let cleaned = String(rev || '').trim();
 
     if (categoryType === 'healthcare') {
       cleaned = cleaned.replace(/\b(cctv|camera|biometric|wiring|installation)\b/gi, 'treatment');
@@ -123,18 +131,20 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
   });
 }
 
+// Robust JSON extraction helper supporting both arrays and JSON objects
 function extractJsonArray(rawText: string): string[] {
   try {
     const parsed = JSON.parse(rawText);
     if (Array.isArray(parsed)) return parsed;
-    if (parsed.reviews && Array.isArray(parsed.reviews)) return parsed.reviews;
+    if (parsed && Array.isArray(parsed.reviews)) return parsed.reviews;
   } catch {
-    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
+    const arrayMatch = rawText.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
       try {
-        return JSON.parse(jsonMatch[0]);
+        const parsedArray = JSON.parse(arrayMatch[0]);
+        if (Array.isArray(parsedArray)) return parsedArray;
       } catch {
-        console.error('Regex array parse failed');
+        console.error('Regex JSON array extraction failed');
       }
     }
   }
@@ -145,41 +155,81 @@ export async function POST(req: Request) {
   try {
     if (!process.env.GROQ_API_KEY) {
       console.error('GROQ_API_KEY missing in Environment Variables');
-      return NextResponse.json({ error: 'GROQ_API_KEY is not configured on the server environment.' }, { status: 500 });
+      return NextResponse.json({ error: 'Groq API Key not configured on server' }, { status: 500 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    // Safe Request Body parsing
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
     const { businessName = 'Business', rating = 5, category = 'Business' } = body;
 
     const profile = getCategoryProfile(category);
+    
     const allCategoryKeywords = [...new Set([...profile.parsedKeywords, ...profile.defaultKeywords])].sort(() => 0.5 - Math.random());
     const singleSelectedKeyword = allCategoryKeywords.length > 0 ? allCategoryKeywords[0] : "";
-    const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random()).slice(0, 3);
 
-    const prompt = `Generate 3 completely UNIQUE, natural Google reviews for "${businessName}" (Category: ${category}).
+    const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random());
+    const p1 = selectedPerspectives[0]?.guide || "General feedback";
+    const p2 = selectedPerspectives[1]?.guide || "Service quality note";
+    const p3 = selectedPerspectives[2]?.guide || "Quick visitor note";
 
-Rating: ${rating} Stars.
-Category Type: "${profile.type.toUpperCase()}".
+    const randomTemp = Number((0.85 + Math.random() * 0.15).toFixed(2));
+    const uniqueSessionSeed = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
-PERSPECTIVES:
-1. ${selectedPerspectives[0]?.guide || 'General note'}
-2. ${selectedPerspectives[1]?.guide || 'Service quality'}
-3. ${selectedPerspectives[2]?.guide || 'Overall impression'}
+    const starNuance = rating <= 4 
+      ? "RATING IS 4 STARS: Include 1 small realistic detail (e.g. 'had to wait 10 mins extra', 'parking area was small', 'counter was a bit busy')." 
+      : "RATING IS 5 STARS: Simple positive experience from a real customer.";
 
-STRICT RULES:
-1. 100% PURE ENGLISH ONLY (No Hindi/Hinglish/transliterated words like bohot, accha, hai, gaya).
-2. NO cliché starters like "Great experience" or "I visited". Vary all sentence starts.
-3. Keep sentences short and daily-conversational. Avoid fancy words (seamless, impeccable).
-4. Keyword to use once overall (optional): "${singleSelectedKeyword}".
+    const prompt = `Generate 3 completely UNIQUE, raw, organic Google reviews for "${businessName}" (Category: ${category}).
+Batch Seed ID: ${uniqueSessionSeed}
 
-Return a JSON object with a key "reviews" containing an array of 3 strings.
-Example format: { "reviews": ["Review 1...", "Review 2...", "Review 3..."] }`;
+Selected Rating: ${rating} Stars.
+${starNuance}
+
+STRICT CATEGORY ISOLATION RULE:
+- Category Type is strictly: "${profile.type.toUpperCase()}".
+- DO NOT mention terms from other industries! (e.g., in Healthcare, NEVER use words like CCTV, camera, software, website, installation, or biometric).
+
+KEYWORD ROTATION RULE:
+- Primary keyword selected for optional single-time use in batch: "${singleSelectedKeyword}".
+- Use this keyword AT MOST ONCE in only 1 review out of 3. Do not put it in all 3 reviews!
+
+REVIEW PERSPECTIVES FOR THIS BATCH:
+- Review 1: ${p1}
+- Review 2: ${p2}
+- Review 3: ${p3}
+
+STRICT LANGUAGE & HUMAN-WRITING RULES:
+1. 100% PURE ENGLISH ONLY:
+   - WRITE EXCLUSIVELY IN STANDARD ENGLISH.
+   - ABSOLUTELY NO HINDI, NO HINGLISH, AND NO TRANSLITERATED WORDS (e.g., NEVER use 'bohot', 'accha', 'hai', 'gaya', 'kar', etc.).
+
+2. NATURAL OPENINGS & HIGH VARIETY:
+   - Let each review start completely naturally in its own unique way.
+   - DO NOT follow a fixed starting template. Each of the 3 reviews MUST start with a totally different word and sentence structure.
+   - Avoid generic cliché starters like "Great experience", "I went to", or "Visited here".
+
+3. SIMPLE CASUAL WRITING STYLE:
+   - Simple daily conversational English. Short, natural sentences.
+   - NO IELTS/fancy words (avoid: "seamless", "impeccable", "top-notch", "exceptional", "proficiency", "consultation").
+
+4. BUSINESS NAME RULE:
+   - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
+   - For the other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
+
+Return a JSON object containing a "reviews" array with 3 string items.
+Example: { "reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."] }`;
 
     const chatCompletion = await createGroqCompletionWithRetry(groq, {
       messages: [
         {
           role: 'system',
-          content: 'You generate short, realistic English Google reviews. Return output exclusively in JSON object format containing a "reviews" array.',
+          content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a JSON object containing a "reviews" array.',
         },
         {
           role: 'user',
@@ -187,28 +237,37 @@ Example format: { "reviews": ["Review 1...", "Review 2...", "Review 3..."] }`;
         },
       ],
       model: 'llama-3.1-8b-instant',
-      temperature: 0.9,
+      temperature: randomTemp,
       response_format: { type: "json_object" },
     });
 
     const content = chatCompletion?.choices[0]?.message?.content || '{}';
-    let reviews = extractJsonArray(content);
+    let reviews: string[] = extractJsonArray(content);
 
     if (Array.isArray(reviews) && reviews.length > 0) {
       reviews = sanitizeReviewContent(reviews, profile.type);
+
+      reviews = reviews.map((rev) => {
+        const words = rev.trim().split(/\s+/);
+        if (words.length < 8) {
+          return `${rev.trim()} Good experience overall.`;
+        }
+        return rev.trim();
+      });
     } else {
       reviews = [
-        "Overall smooth experience with clear instructions.",
-        "Quick service and helpful staff members.",
-        "Satisfied with the overall experience here."
+        "Overall simple and hassle-free experience here.",
+        "Quick service and clear guidance provided.",
+        "Satisfied with how everything was handled."
       ];
     }
 
     return NextResponse.json({ reviews });
-  } catch (error: any) {
-    console.error('Groq API Execution Error:', error);
+  } catch (error: unknown) {
+    console.error('Groq API Error:', error);
+    const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
     return NextResponse.json(
-      { error: error?.message || 'Server error generating reviews' },
+      { error: errorMsg },
       { status: 500 }
     );
   }
