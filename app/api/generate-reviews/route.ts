@@ -112,10 +112,11 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
     { pattern: /staff was nice\b/i, replacement: 'everyone was polite' },
   ];
 
+  // Regex to strip out common accidental Hinglish words
   const hinglishCleaner = /\b(accha|achha|bohot|bahut|badiya|sahi|hai|ho|gaya|kar|diya|chahiye|wala|wali|wale|karo|plz)\b/gi;
 
   return reviews.map((rev) => {
-    let cleaned = String(rev || '').trim();
+    let cleaned = rev.trim();
 
     if (categoryType === 'healthcare') {
       cleaned = cleaned.replace(/\b(cctv|camera|biometric|wiring|installation)\b/gi, 'treatment');
@@ -131,17 +132,17 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
   });
 }
 
-// Robust JSON extraction helper supporting both arrays and JSON objects
+// Robust JSON extraction helper
 function extractJsonArray(rawText: string): string[] {
   try {
     const parsed = JSON.parse(rawText);
     if (Array.isArray(parsed)) return parsed;
     if (parsed && Array.isArray(parsed.reviews)) return parsed.reviews;
   } catch {
-    const arrayMatch = rawText.match(/\[[\s\S]*\]/);
-    if (arrayMatch) {
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
       try {
-        const parsedArray = JSON.parse(arrayMatch[0]);
+        const parsedArray = JSON.parse(jsonMatch[0]);
         if (Array.isArray(parsedArray)) return parsedArray;
       } catch {
         console.error('Regex JSON array extraction failed');
@@ -155,10 +156,9 @@ export async function POST(req: Request) {
   try {
     if (!process.env.GROQ_API_KEY) {
       console.error('GROQ_API_KEY missing in Environment Variables');
-      return NextResponse.json({ error: 'Groq API Key not configured on server' }, { status: 500 });
+      return NextResponse.json({ error: 'Groq API Key not configured' }, { status: 500 });
     }
 
-    // Safe Request Body parsing
     let body: any = {};
     try {
       body = await req.json();
@@ -173,12 +173,12 @@ export async function POST(req: Request) {
     const allCategoryKeywords = [...new Set([...profile.parsedKeywords, ...profile.defaultKeywords])].sort(() => 0.5 - Math.random());
     const singleSelectedKeyword = allCategoryKeywords.length > 0 ? allCategoryKeywords[0] : "";
 
-    const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random());
-    const p1 = selectedPerspectives[0]?.guide || "General feedback";
-    const p2 = selectedPerspectives[1]?.guide || "Service quality note";
-    const p3 = selectedPerspectives[2]?.guide || "Quick visitor note";
+    const selectedPerspectives = [...profile.perspectives].sort(() => 0.5 - Math.random()).slice(0, 3);
+    const p1 = selectedPerspectives[0] ? `${selectedPerspectives[0].role}: ${selectedPerspectives[0].guide}` : "General feedback";
+    const p2 = selectedPerspectives[1] ? `${selectedPerspectives[1].role}: ${selectedPerspectives[1].guide}` : "Service quality note";
+    const p3 = selectedPerspectives[2] ? `${selectedPerspectives[2].role}: ${selectedPerspectives[2].guide}` : "Quick visitor note";
 
-    const randomTemp = Number((0.85 + Math.random() * 0.15).toFixed(2));
+    const randomTemp = Number((0.85 + Math.random() * 0.10).toFixed(2));
     const uniqueSessionSeed = `session_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
     const starNuance = rating <= 4 
@@ -222,27 +222,56 @@ STRICT LANGUAGE & HUMAN-WRITING RULES:
    - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
    - For the other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
 
-Return a JSON object containing a "reviews" array with 3 string items.
-Example: { "reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."] }`;
+Return a JSON object containing a "reviews" array with 3 string items. Example: { "reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."] }`;
 
-    const chatCompletion = await createGroqCompletionWithRetry(groq, {
-      messages: [
-        {
-          role: 'system',
-          content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a JSON object containing a "reviews" array.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      model: 'llama-3.1-8b-instant',
-      temperature: randomTemp,
-      response_format: { type: "json_object" },
-    });
+    let chatCompletion;
+    
+    // Primary attempt with updated valid model llama-3.3-70b-versatile
+    try {
+      chatCompletion = await createGroqCompletionWithRetry(groq, {
+        messages: [
+          {
+            role: 'system',
+            content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a JSON object containing a "reviews" array of strings.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        model: 'llama-3.3-70b-versatile',
+        temperature: randomTemp,
+        response_format: { type: "json_object" },
+      });
+    } catch (primaryErr: any) {
+      console.warn('Primary model llama-3.3-70b-versatile failed, falling back to llama-3.1-8b-instant...', primaryErr?.message);
+      
+      // Fallback attempt with llama-3.1-8b-instant
+      chatCompletion = await createGroqCompletionWithRetry(groq, {
+        messages: [
+          {
+            role: 'system',
+            content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a JSON object containing a "reviews" array of strings.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        model: 'llama-3.1-8b-instant',
+        temperature: randomTemp,
+        response_format: { type: "json_object" },
+      });
+    }
 
     const content = chatCompletion?.choices[0]?.message?.content || '{}';
-    let reviews: string[] = extractJsonArray(content);
+    
+    const cleanedContent = content
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    let reviews: string[] = extractJsonArray(cleanedContent);
 
     if (Array.isArray(reviews) && reviews.length > 0) {
       reviews = sanitizeReviewContent(reviews, profile.type);
@@ -264,7 +293,7 @@ Example: { "reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text...
 
     return NextResponse.json({ reviews });
   } catch (error: unknown) {
-    console.error('Groq API Error:', error);
+    console.error('Groq API Error Details:', error);
     const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
     return NextResponse.json(
       { error: errorMsg },
