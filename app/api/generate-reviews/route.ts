@@ -213,7 +213,7 @@ Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Rev
 
     let chatCompletion;
     
-    // Primary: llama-3.3-70b-versatile
+    // Active Model: llama-3.3-70b-versatile
     try {
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
@@ -230,9 +230,9 @@ Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Rev
         temperature: randomTemp,
       });
     } catch (primaryErr: any) {
-      console.warn('Primary model failed, attempting fallback to llama3-8b-8192:', primaryErr?.message || primaryErr);
+      console.warn('Primary model llama-3.3-70b-versatile failed, attempting fallback to llama-3.2-3b-preview:', primaryErr?.message || primaryErr);
       
-      // Fallback: llama3-8b-8192
+      // Fallback: llama-3.2-3b-preview
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
           {
@@ -244,7 +244,7 @@ Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Rev
             content: prompt,
           },
         ],
-        model: 'llama3-8b-8192',
+        model: 'llama-3.2-3b-preview',
         temperature: randomTemp,
       });
     }
