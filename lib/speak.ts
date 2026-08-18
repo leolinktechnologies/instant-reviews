@@ -8,18 +8,18 @@ export function playHindiVoiceInstruction(): void {
     // Stop any currently playing audio to prevent overlapping or queued messages
     window.speechSynthesis.cancel();
 
-    // Neutral Script: Guides the user to pick whichever review matches their experience
-    const text = "Aapko jo review sabse sahi lage, use chuniye. Click karte hi yeh copy ho jayega, phir comment section me paste karke post kar dein.";
+    // Short, direct, and neutral script
+    const text = "Aapko jo bhi review aapke experience se relevant lagta hai click kijiye, aur bas comment me paste karke post kar dijiye.";
     const utterance = new SpeechSynthesisUtterance(text);
 
     utterance.lang = 'hi-IN';
-    utterance.rate = 0.88; // Slightly relaxed pace for clarity
+    utterance.rate = 0.9; // Clear, direct pace
     utterance.pitch = 1.0;
 
     const speakWithBestVoice = () => {
       const voices = window.speechSynthesis.getVoices();
       
-      // Look specifically for Hindi (India) or English (India) voices for a natural accent
+      // Target Indian accent voices (Hindi or English India fallback)
       const indianVoice = voices.find(
         (v) =>
           v.lang === 'hi-IN' ||
@@ -36,18 +36,18 @@ export function playHindiVoiceInstruction(): void {
       window.speechSynthesis.speak(utterance);
     };
 
-    // Browsers like Chrome load voices asynchronously; handle this gracefully
+    // Handle asynchronous voice loading in browsers like Chrome
     const availableVoices = window.speechSynthesis.getVoices();
     if (availableVoices.length > 0) {
       speakWithBestVoice();
     } else {
       window.speechSynthesis.onvoiceschanged = () => {
         speakWithBestVoice();
-        window.speechSynthesis.onvoiceschanged = null; // Clean up handler
+        window.speechSynthesis.onvoiceschanged = null; // Clean up listener
       };
     }
   } catch (error) {
-    // Fail silently so UI interaction is never interrupted
+    // Fail silently to ensure UI interaction is never interrupted
     console.warn('Speech synthesis non-fatal error:', error);
   }
 }
