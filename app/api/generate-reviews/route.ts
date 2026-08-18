@@ -22,7 +22,6 @@ async function createGroqCompletionWithRetry(groqClient: any, params: any, retri
   }
 }
 
-// Helper to extract and clean comma/slash separated keywords from category input
 function parseCategoriesAndKeywords(rawCategory: string): string[] {
   if (!rawCategory) return [];
   return rawCategory
@@ -35,7 +34,6 @@ function getCategoryProfile(rawCategory: string) {
   const cat = (rawCategory || '').toLowerCase();
   const parsedKeywords = parseCategoriesAndKeywords(rawCategory);
 
-  // 1. HEALTHCARE / CLINIC / DENTAL / HOSPITAL
   if (cat.includes('dental') || cat.includes('dentist') || cat.includes('clinic') || cat.includes('health') || cat.includes('hospital') || cat.includes('doctor') || cat.includes('physio') || cat.includes('eye')) {
     return {
       type: 'healthcare',
@@ -51,7 +49,6 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
-  // 2. SECURITY / CCTV / SURVEILLANCE
   if (cat.includes('cctv') || cat.includes('security') || cat.includes('biometric') || cat.includes('fire alarm') || cat.includes('surveillance')) {
     return {
       type: 'security_tech',
@@ -65,7 +62,6 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
-  // 3. IT / TECH / AGENCIES
   if (cat.includes('it') || cat.includes('tech') || cat.includes('software') || cat.includes('digital') || cat.includes('web') || cat.includes('agency')) {
     return {
       type: 'b2b_tech',
@@ -78,7 +74,6 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
-  // 4. RESTAURANTS / FOOD
   if (cat.includes('restaur') || cat.includes('food') || cat.includes('cafe') || cat.includes('bakery')) {
     return {
       type: 'food',
@@ -91,7 +86,6 @@ function getCategoryProfile(rawCategory: string) {
     };
   }
 
-  // 5. GENERAL SERVICES
   return {
     type: 'general',
     defaultKeywords: ["in-store visit", "billing", "work quality", "delivery time"],
@@ -102,7 +96,6 @@ function getCategoryProfile(rawCategory: string) {
   };
 }
 
-// Post-processing Sanitizer to remove leaks & any non-English/Hinglish remnants
 function sanitizeReviewContent(reviews: string[], categoryType: string): string[] {
   const commonBannedPhrases = [
     { pattern: /^doctor was good\b/i, replacement: 'Clear advice provided' },
@@ -112,7 +105,6 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
     { pattern: /staff was nice\b/i, replacement: 'everyone was polite' },
   ];
 
-  // Regex to strip out common accidental Hinglish words
   const hinglishCleaner = /\b(accha|achha|bohot|bahut|badiya|sahi|hai|ho|gaya|kar|diya|chahiye|wala|wali|wale|karo|plz)\b/gi;
 
   return reviews.map((rev) => {
@@ -132,7 +124,6 @@ function sanitizeReviewContent(reviews: string[], categoryType: string): string[
   });
 }
 
-// Robust JSON extraction helper
 function extractJsonArray(rawText: string): string[] {
   try {
     const parsed = JSON.parse(rawText);
@@ -207,32 +198,28 @@ REVIEW PERSPECTIVES FOR THIS BATCH:
 STRICT LANGUAGE & HUMAN-WRITING RULES:
 1. 100% PURE ENGLISH ONLY:
    - WRITE EXCLUSIVELY IN STANDARD ENGLISH.
-   - ABSOLUTELY NO HINDI, NO HINGLISH, AND NO TRANSLITERATED WORDS (e.g., NEVER use 'bohot', 'accha', 'hai', 'gaya', 'kar', etc.).
+   - ABSOLUTELY NO HINDI, NO HINGLISH, AND NO TRANSLITERATED WORDS.
 
 2. NATURAL OPENINGS & HIGH VARIETY:
-   - Let each review start completely naturally in its own unique way.
-   - DO NOT follow a fixed starting template. Each of the 3 reviews MUST start with a totally different word and sentence structure.
-   - Avoid generic cliché starters like "Great experience", "I went to", or "Visited here".
+   - Let each review start naturally in its own unique way. Avoid generic cliché starters like "Great experience" or "Visited here".
 
 3. SIMPLE CASUAL WRITING STYLE:
    - Simple daily conversational English. Short, natural sentences.
-   - NO IELTS/fancy words (avoid: "seamless", "impeccable", "top-notch", "exceptional", "proficiency", "consultation").
 
 4. BUSINESS NAME RULE:
    - Mention "${businessName}" IN MAXIMUM 1 OUT OF 3 REVIEWS.
-   - For the other 2 reviews, use simple words like "here", "they", "this place", or no name at all.
 
-Return a JSON object containing a "reviews" array with 3 string items. Example: { "reviews": ["Review 1 text...", "Review 2 text...", "Review 3 text..."] }`;
+Return ONLY a valid JSON array of 3 strings like this: ["Review 1 text...", "Review 2 text...", "Review 3 text..."]`;
 
     let chatCompletion;
     
-    // Primary attempt with updated valid model llama-3.3-70b-versatile
+    // Primary: llama-3.3-70b-versatile
     try {
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
           {
             role: 'system',
-            content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a JSON object containing a "reviews" array of strings.',
+            content: 'You generate short casual English Google reviews. Respond ONLY with a valid JSON array of string reviews.',
           },
           {
             role: 'user',
@@ -241,30 +228,28 @@ Return a JSON object containing a "reviews" array with 3 string items. Example: 
         ],
         model: 'llama-3.3-70b-versatile',
         temperature: randomTemp,
-        response_format: { type: "json_object" },
       });
     } catch (primaryErr: any) {
-      console.warn('Primary model llama-3.3-70b-versatile failed, falling back to llama-3.1-8b-instant...', primaryErr?.message);
+      console.warn('Primary model failed, attempting fallback to llama3-8b-8192:', primaryErr?.message || primaryErr);
       
-      // Fallback attempt with llama-3.1-8b-instant
+      // Fallback: llama3-8b-8192
       chatCompletion = await createGroqCompletionWithRetry(groq, {
         messages: [
           {
             role: 'system',
-            content: 'You generate raw, casual, human-written English Google reviews. Output ONLY a JSON object containing a "reviews" array of strings.',
+            content: 'You generate short casual English Google reviews. Respond ONLY with a valid JSON array of string reviews.',
           },
           {
             role: 'user',
             content: prompt,
           },
         ],
-        model: 'llama-3.1-8b-instant',
+        model: 'llama3-8b-8192',
         temperature: randomTemp,
-        response_format: { type: "json_object" },
       });
     }
 
-    const content = chatCompletion?.choices[0]?.message?.content || '{}';
+    const content = chatCompletion?.choices[0]?.message?.content || '[]';
     
     const cleanedContent = content
       .replace(/```json/g, '')
