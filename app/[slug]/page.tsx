@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { playHindiVoiceInstruction } from '@/lib/speak';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -96,7 +97,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
       } catch (err) {
         console.error('Error fetching business:', err);
         setNotFound(true);
-      } finally {
+      } font-medium {
         setLoadingBusiness(false);
       }
     }
@@ -308,6 +309,11 @@ export default function BusinessReviewPage({ params }: PageProps) {
                     setRating(star);
                     setFeedbackSubmitted(false);
                     logAnalytics('rated', star);
+
+                    // Trigger non-blocking Hindi Voice Instruction for 4 and 5 Stars
+                    if (star >= 4) {
+                      playHindiVoiceInstruction();
+                    }
                   }}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"
                 >
