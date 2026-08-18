@@ -5,7 +5,6 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
-// Cache available model IDs in memory per container runtime
 let cachedModelId: string | null = null;
 
 async function getAvailableModel(): Promise<string> {
@@ -15,13 +14,13 @@ async function getAvailableModel(): Promise<string> {
     const modelsList = await groq.models.list();
     const availableIds = modelsList.data.map((m: any) => m.id);
 
-    // Preferred hierarchy of models
+    // Active production models supported by Groq
     const preferredOrder = [
       'llama-3.3-70b-versatile',
-      'llama-3.1-70b-versatile',
-      'llama3-70b-8192',
       'llama-3.1-8b-instant',
-      'mixtral-8x7b-32768'
+      'llama-3.1-70b-versatile',
+      'qwen-2.5-72b',
+      'gemma2-9b-it'
     ];
 
     for (const model of preferredOrder) {
@@ -31,21 +30,21 @@ async function getAvailableModel(): Promise<string> {
       }
     }
 
-    // Default to the first available non-whisper/non-vision text model
-    const fallbackModel = availableIds.find(
-      (id: string) => !id.includes('whisper') && !id.includes('vision')
+    // Dynamic selection: pick the first available text generation model
+    const dynamicModel = availableIds.find(
+      (id: string) => !id.includes('whisper') && !id.includes('vision') && !id.includes('guard')
     );
 
-    if (fallbackModel) {
-      cachedModelId = fallbackModel;
-      return fallbackModel;
+    if (dynamicModel) {
+      cachedModelId = dynamicModel;
+      return dynamicModel;
     }
   } catch (err) {
-    console.warn('Failed to fetch dynamic model list from Groq:', err);
+    console.warn('Failed to fetch active Groq models list:', err);
   }
 
-  // Hard fallback baseline
-  return 'llama-3.1-70b-versatile';
+  // Active baseline model
+  return 'llama-3.3-70b-versatile';
 }
 
 async function createGroqCompletionWithRetry(groqClient: any, params: any, retries = 3, delay = 1500) {
@@ -289,7 +288,6 @@ You must respond using valid JSON. Format your response strictly as a JSON objec
     return NextResponse.json({ reviews });
   } catch (error: unknown) {
     console.error('Groq API Final Exception:', error);
-    // Reset cache on failure so next request pulls fresh models list
     cachedModelId = null;
 
     const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
