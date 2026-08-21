@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { playSelectReviewInstruction, playPasteReviewInstruction } from '@/lib/speak';
+import { playHindiVoiceInstruction } from '@/lib/speak';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -38,7 +38,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Non-blocking Analytics Event Logger (Fixed TypeScript Compatibility)
+  // Helper: Analytics Event Logger (Fixed TS build error & non-blocking execution)
   const logAnalytics = (
     eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
@@ -59,7 +59,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     })();
   };
 
-  // Fetch Business Details from Supabase (Optimized & Non-blocking)
+  // Fetch Business Details from Supabase
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) {
@@ -90,7 +90,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             }
           }
 
-          // Log Visitor Page View Event in Background
+          // Log Visitor Page View Event
           logAnalytics('visited', null);
         } else {
           setBusinessData(null);
@@ -170,9 +170,6 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
-    // Play voice instruction: "Now just paste it to the comments."
-    playPasteReviewInstruction();
-
     logAnalytics('copied_redirect', rating);
 
     // 1. Copy Review Text to Clipboard with Fallback
@@ -200,10 +197,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
 
-    // 3. 1.5 Seconds Delay for Redirection
+    // 3. Quick delay for smooth UX transition
     setTimeout(() => {
       window.location.href = targetUrl;
-    }, 1500);
+    }, 1650);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -315,9 +312,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
                     setFeedbackSubmitted(false);
                     logAnalytics('rated', star);
 
-                    // Trigger Voice Instruction: "Choose the review you find relevant." for 4 & 5 stars
+                    // Trigger non-blocking Hindi Voice Instruction for 4 and 5 Stars
                     if (star >= 4) {
-                      playSelectReviewInstruction();
+                      playHindiVoiceInstruction();
                     }
                   }}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"
