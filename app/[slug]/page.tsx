@@ -201,7 +201,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     // 3. Quick delay for smooth UX transition and voice playback
     setTimeout(() => {
       window.location.href = targetUrl;
-    }, 300);
+    }, 1500);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
