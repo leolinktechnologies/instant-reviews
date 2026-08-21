@@ -38,26 +38,27 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Analytics Event Logger (Supports 'visited', 'rated', 'generated', 'copied_redirect')
-  const logAnalytics = async (
+  // Helper: Non-blocking Analytics Event Logger
+  const logAnalytics = (
     eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
   ) => {
     if (!slug) return;
-    try {
-      await supabase.from('review_analytics').insert([
+    // Fire-and-forget: No await so UI does not pause
+    supabase
+      .from('review_analytics')
+      .insert([
         {
           business_slug: slug,
           event_type: eventType,
           rating: ratingVal !== undefined ? ratingVal : rating,
         },
-      ]);
-    } catch (err) {
-      console.error('Error logging analytics:', err);
-    }
+      ])
+      .then(() => {})
+      .catch((err) => console.error('Error logging analytics:', err));
   };
 
-  // Fetch Business Details from Supabase
+  // Fetch Business Details from Supabase (Optimized, non-blocking analytics)
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) {
@@ -88,7 +89,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             }
           }
 
-          // Log Visitor Page View Event
+          // Log Visitor Page View Event in Background
           logAnalytics('visited', null);
         } else {
           setBusinessData(null);
@@ -134,7 +135,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
       const data = await res.json();
       if (data?.reviews && Array.isArray(data.reviews)) {
         setReviews(data.reviews);
-        await logAnalytics('generated', selectedRating);
+        logAnalytics('generated', selectedRating);
       }
     } catch (err) {
       console.error('Error generating reviews:', err);
@@ -198,7 +199,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
 
-    // 3. Quick delay for smooth UX transition and voice playback
+    // 3. 1.5 Seconds Delay for redirection
     setTimeout(() => {
       window.location.href = targetUrl;
     }, 1500);
