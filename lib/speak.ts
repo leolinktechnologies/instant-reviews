@@ -1,32 +1,29 @@
-export function playHindiVoiceInstruction(): void {
-  // Safe check for Server-Side Rendering (SSR) and Browser Support
+// Helper function to safely speak text in a natural Indian English accent (en-IN)
+function speakInIndianAccent(text: string): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return;
   }
 
   try {
-    // Stop any currently playing audio to prevent overlapping or queued messages
+    // Cancel any ongoing speech so messages don't overlap
     window.speechSynthesis.cancel();
 
-    // Short, direct, and neutral script
-    const text = "Aapko jo bhi review aapke experience se relevant lagta hai click kijiye, aur bas comment me paste karke post kar dijiye.";
     const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.lang = 'hi-IN';
-    utterance.rate = 0.9; // Clear, direct pace
+    utterance.lang = 'en-IN'; // Targets Indian English accent across iOS & Android
+    utterance.rate = 0.95;    // Clear, natural pace
     utterance.pitch = 1.0;
 
-    const speakWithBestVoice = () => {
+    const speak = () => {
       const voices = window.speechSynthesis.getVoices();
       
-      // Target Indian accent voices (Hindi or English India fallback)
+      // Strict Indian Voice Matcher (Works reliably on iOS, macOS, Android, & Windows)
       const indianVoice = voices.find(
         (v) =>
-          v.lang === 'hi-IN' ||
           v.lang === 'en-IN' ||
-          v.lang.toLowerCase().includes('hi_in') ||
-          v.name.toLowerCase().includes('hindi') ||
-          v.name.toLowerCase().includes('india')
+          v.lang.toLowerCase().includes('en_in') ||
+          v.name.toLowerCase().includes('india') ||
+          v.name.toLowerCase().includes('rishi') || // iOS Indian Voice
+          v.name.toLowerCase().includes('veena')  // iOS / macOS Indian Voice
       );
 
       if (indianVoice) {
@@ -36,18 +33,26 @@ export function playHindiVoiceInstruction(): void {
       window.speechSynthesis.speak(utterance);
     };
 
-    // Handle asynchronous voice loading in browsers like Chrome
     const availableVoices = window.speechSynthesis.getVoices();
     if (availableVoices.length > 0) {
-      speakWithBestVoice();
+      speak();
     } else {
       window.speechSynthesis.onvoiceschanged = () => {
-        speakWithBestVoice();
-        window.speechSynthesis.onvoiceschanged = null; // Clean up listener
+        speak();
+        window.speechSynthesis.onvoiceschanged = null;
       };
     }
   } catch (error) {
-    // Fail silently to ensure UI interaction is never interrupted
-    console.warn('Speech synthesis non-fatal error:', error);
+    console.warn('Speech synthesis error:', error);
   }
+}
+
+// 1. Called when user selects/clicks Star Rating
+export function playSelectReviewInstruction(): void {
+  speakInIndianAccent("Choose the review you find relevant.");
+}
+
+// 2. Called when user clicks/selects a Review card (to copy)
+export function playPasteReviewInstruction(): void {
+  speakInIndianAccent("Now just paste it to the comments.");
 }
