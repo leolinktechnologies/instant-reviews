@@ -23,7 +23,7 @@ function speakInIndianAccent(text: string): void {
           v.lang.toLowerCase().includes('en_in') ||
           v.name.toLowerCase().includes('india') ||
           v.name.toLowerCase().includes('rishi') || // iOS Indian Voice
-          v.name.toLowerCase().includes('veena')  // iOS / macOS Indian Voice
+          v.name.toLowerCase().includes('veena')   // iOS / macOS Indian Voice
       );
 
       if (indianVoice) {
@@ -55,4 +55,9 @@ export function playSelectReviewInstruction(): void {
 // 2. Called when user clicks/selects a Review card (to copy)
 export function playPasteReviewInstruction(): void {
   speakInIndianAccent("Now just paste it to the comments.");
+}
+
+// 3. Backward compatibility (Prevents build crash if old name is imported)
+export function playHindiVoiceInstruction(): void {
+  playSelectReviewInstruction();
 }

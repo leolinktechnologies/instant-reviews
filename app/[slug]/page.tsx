@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { playHindiVoiceInstruction } from '@/lib/speak';
+import { playSelectReviewInstruction, playPasteReviewInstruction } from '@/lib/speak';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -97,7 +97,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
       } catch (err) {
         console.error('Error fetching business:', err);
         setNotFound(true);
-      } finally {
+      } font-medium {
         setLoadingBusiness(false);
       }
     }
@@ -168,6 +168,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
+    // Play voice instruction: "Now just paste it to the comments."
+    playPasteReviewInstruction();
+
     logAnalytics('copied_redirect', rating);
 
     // 1. Copy Review Text to Clipboard with Fallback
@@ -195,10 +198,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
 
-    // 3. Quick delay for smooth UX transition
+    // 3. Quick delay for smooth UX transition and voice playback
     setTimeout(() => {
       window.location.href = targetUrl;
-    }, 800);
+    }, 1200);
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -310,9 +313,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
                     setFeedbackSubmitted(false);
                     logAnalytics('rated', star);
 
-                    // Trigger non-blocking Hindi Voice Instruction for 4 and 5 Stars
+                    // Trigger Voice Instruction: "Choose the review you find relevant." for 4 & 5 stars
                     if (star >= 4) {
-                      playHindiVoiceInstruction();
+                      playSelectReviewInstruction();
                     }
                   }}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"
