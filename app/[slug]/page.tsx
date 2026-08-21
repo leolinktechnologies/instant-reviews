@@ -38,27 +38,28 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Non-blocking Analytics Event Logger
+  // Helper: Non-blocking Analytics Event Logger (Fixed TypeScript Compatibility)
   const logAnalytics = (
     eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
   ) => {
     if (!slug) return;
-    // Fire-and-forget: No await so UI does not pause
-    supabase
-      .from('review_analytics')
-      .insert([
-        {
-          business_slug: slug,
-          event_type: eventType,
-          rating: ratingVal !== undefined ? ratingVal : rating,
-        },
-      ])
-      .then(() => {})
-      .catch((err) => console.error('Error logging analytics:', err));
+    (async () => {
+      try {
+        await supabase.from('review_analytics').insert([
+          {
+            business_slug: slug,
+            event_type: eventType,
+            rating: ratingVal !== undefined ? ratingVal : rating,
+          },
+        ]);
+      } catch (err) {
+        console.error('Error logging analytics:', err);
+      }
+    })();
   };
 
-  // Fetch Business Details from Supabase (Optimized, non-blocking analytics)
+  // Fetch Business Details from Supabase (Optimized & Non-blocking)
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) {
@@ -199,7 +200,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
 
-    // 3. 1.5 Seconds Delay for redirection
+    // 3. 1.5 Seconds Delay for Redirection
     setTimeout(() => {
       window.location.href = targetUrl;
     }, 1500);
