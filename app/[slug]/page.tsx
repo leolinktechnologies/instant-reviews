@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { playHindiVoiceInstruction } from '@/lib/speak';
+import { playSelectReviewInstruction, playPasteReviewInstruction } from '@/lib/speak';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -38,28 +38,26 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Analytics Event Logger (Fixed TS build error & non-blocking execution)
-  const logAnalytics = (
+  // Helper: Analytics Event Logger (TS2339 fixed with optional ratingVal)
+  const logAnalytics = async (
     eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
   ) => {
     if (!slug) return;
-    (async () => {
-      try {
-        await supabase.from('review_analytics').insert([
-          {
-            business_slug: slug,
-            event_type: eventType,
-            rating: ratingVal !== undefined ? ratingVal : rating,
-          },
-        ]);
-      } catch (err) {
-        console.error('Error logging analytics:', err);
-      }
-    })();
+    try {
+      await supabase.from('review_analytics').insert([
+        {
+          business_slug: slug,
+          event_type: eventType,
+          rating: ratingVal !== undefined ? ratingVal : rating,
+        },
+      ]);
+    } catch (err) {
+      console.error('Error logging analytics:', err);
+    }
   };
 
-  // Fetch Business Details from Supabase
+  // Fetch Business Details from Supabase & Optimized Page Load
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) {
@@ -90,7 +88,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
             }
           }
 
-          // Log Visitor Page View Event
+          // Log Visitor Page View Event non-blockingly
           logAnalytics('visited', null);
         } else {
           setBusinessData(null);
@@ -136,7 +134,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
       const data = await res.json();
       if (data?.reviews && Array.isArray(data.reviews)) {
         setReviews(data.reviews);
-        logAnalytics('generated', selectedRating);
+        await logAnalytics('generated', selectedRating);
       }
     } catch (err) {
       console.error('Error generating reviews:', err);
@@ -170,9 +168,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
   };
 
   const handleCopyAndRedirect = async (reviewText: string, index: number) => {
+    playPasteReviewInstruction();
     logAnalytics('copied_redirect', rating);
 
-    // 1. Copy Review Text to Clipboard with Fallback
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(reviewText);
@@ -193,11 +191,9 @@ export default function BusinessReviewPage({ params }: PageProps) {
 
     setCopiedIndex(index);
 
-    // 2. Direct Review Link Format
     const rawUrl = businessData?.google_review_url || 'https://google.com';
     const targetUrl = getDirectReviewUrl(rawUrl);
 
-    // 3. Quick delay for smooth UX transition
     setTimeout(() => {
       window.location.href = targetUrl;
     }, 1650);
@@ -312,9 +308,8 @@ export default function BusinessReviewPage({ params }: PageProps) {
                     setFeedbackSubmitted(false);
                     logAnalytics('rated', star);
 
-                    // Trigger non-blocking Hindi Voice Instruction for 4 and 5 Stars
                     if (star >= 4) {
-                      playHindiVoiceInstruction();
+                      playSelectReviewInstruction();
                     }
                   }}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"
