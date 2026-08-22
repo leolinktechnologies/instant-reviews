@@ -26,15 +26,16 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  // Prefetch Cache Ref
+  // Prefetch Cache & Promise Refs
   const prefetchedReviewsRef = useRef<string[] | null>(null);
-  const isPrefetchingRef = useRef<boolean>(false);
+  const prefetchPromiseRef = useRef<Promise<string[] | null> | null>(null);
 
   // Feedback States
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
+  // Analytics Logger
   const logAnalytics = (
     eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
@@ -59,43 +60,68 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
     prefetchDefaultReviews(businessData.business_name, businessData.category);
   }, [slug]);
 
-  const prefetchDefaultReviews = async (bName: string, cat: string) => {
-    if (prefetchedReviewsRef.current || isPrefetchingRef.current) return;
-    isPrefetchingRef.current = true;
+  // Silent Background Prefetch
+  const prefetchDefaultReviews = (bName: string, cat: string) => {
+    if (prefetchedReviewsRef.current || prefetchPromiseRef.current) return;
 
-    try {
-      const res = await fetch('/api/generate-reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName: bName,
-          rating: 5,
-          category: cat || 'Business',
-        }),
-      });
+    prefetchPromiseRef.current = (async () => {
+      try {
+        const res = await fetch('/api/generate-reviews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            businessName: bName,
+            rating: 5,
+            category: cat || 'Business',
+          }),
+        });
 
-      const data = await res.json();
-      if (data?.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
-        prefetchedReviewsRef.current = data.reviews;
+        const data = await res.json();
+        if (data?.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          prefetchedReviewsRef.current = data.reviews;
+          return data.reviews;
+        }
+      } catch (err) {
+        console.warn('Silent prefetch failed:', err);
+      } finally {
+        prefetchPromiseRef.current = null;
       }
-    } catch (err) {
-      console.warn('Silent prefetch failed:', err);
-    } finally {
-      isPrefetchingRef.current = false;
-    }
+      return null;
+    })();
   };
 
+  // Auto-Generate / Fetch Reviews
   useEffect(() => {
     if (rating !== null && rating >= 4) {
-      if (prefetchedReviewsRef.current && prefetchedReviewsRef.current.length > 0) {
-        setReviews(prefetchedReviewsRef.current);
-        logAnalytics('generated', rating);
-        prefetchedReviewsRef.current = null;
-      } else {
-        generateReviewsAuto(rating, businessData.business_name, businessData.category);
-      }
+      handleHighRatingReviews(rating);
     }
   }, [rating]);
+
+  const handleHighRatingReviews = async (selectedRating: number) => {
+    // 1. Check if cached
+    if (prefetchedReviewsRef.current && prefetchedReviewsRef.current.length > 0) {
+      setReviews(prefetchedReviewsRef.current);
+      logAnalytics('generated', selectedRating);
+      prefetchedReviewsRef.current = null;
+      return;
+    }
+
+    // 2. Check if prefetch request is currently in-flight
+    if (prefetchPromiseRef.current) {
+      setLoadingReviews(true);
+      const prefetched = await prefetchPromiseRef.current;
+      if (prefetched && prefetched.length > 0) {
+        setReviews(prefetched);
+        logAnalytics('generated', selectedRating);
+        setLoadingReviews(false);
+        prefetchedReviewsRef.current = null;
+        return;
+      }
+    }
+
+    // 3. Fallback to direct API call
+    generateReviewsAuto(selectedRating, businessData.business_name, businessData.category);
+  };
 
   const generateReviewsAuto = async (selectedRating: number, bName: string, cat: string) => {
     setLoadingReviews(true);
@@ -194,7 +220,7 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
       } else {
         setFeedbackSubmitted(true);
       }
-    } catch (err: any) {
+    } catch (err) {
       alert('System Error while saving feedback');
     } finally {
       setSubmittingFeedback(false);
@@ -204,7 +230,7 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pt-8 pb-12 px-4 sm:px-6">
       <div className="relative w-full max-w-lg space-y-8 text-center">
-        
+
         {/* Header */}
         <div className="space-y-3 pt-2">
           <p className="text-xs sm:text-sm font-semibold text-amber-400 uppercase tracking-widest">
@@ -220,7 +246,7 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
 
         {/* Main Rating Card */}
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-7 shadow-2xl space-y-7">
-          
+
           {/* Star Picker */}
           <div className="space-y-3">
             <div className="flex items-center justify-center gap-3">
@@ -229,6 +255,7 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
                   key={star}
                   type="button"
                   onClick={() => {
+                    if (rating === star) return;
                     setRating(star);
                     setFeedbackSubmitted(false);
                     logAnalytics('rated', star);
