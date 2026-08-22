@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { playSelectReviewInstruction, playPasteReviewInstruction } from '@/lib/speak';
 
@@ -33,12 +33,16 @@ export default function BusinessReviewPage({ params }: PageProps) {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
+  // ⚡ Prefetch Cache Ref
+  const prefetchedReviewsRef = useRef<string[] | null>(null);
+  const isPrefetchingRef = useRef<boolean>(false);
+
   // 1-3 Stars Feedback States
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
-  // Helper: Analytics Event Logger (TS2339 fixed with optional ratingVal)
+  // Helper: Analytics Event Logger
   const logAnalytics = async (
     eventType: 'visited' | 'rated' | 'generated' | 'copied_redirect',
     ratingVal?: number | null
@@ -57,7 +61,7 @@ export default function BusinessReviewPage({ params }: PageProps) {
     }
   };
 
-  // Fetch Business Details from Supabase & Optimized Page Load
+  // Fetch Business Details from Supabase & Silent Prefetch Trigger
   useEffect(() => {
     async function fetchBusiness() {
       if (!slug) {
@@ -88,8 +92,10 @@ export default function BusinessReviewPage({ params }: PageProps) {
             }
           }
 
-          // Log Visitor Page View Event non-blockingly
           logAnalytics('visited', null);
+
+          // ⚡ Silent Background Prefetch (Page Load Par Hi Generate Ho Jayenge)
+          prefetchDefaultReviews(data.business_name, data.category);
         } else {
           setBusinessData(null);
           setNotFound(true);
@@ -105,10 +111,45 @@ export default function BusinessReviewPage({ params }: PageProps) {
     fetchBusiness();
   }, [slug]);
 
-  // AI Reviews Trigger
+  // ⚡ Background Prefetch Function
+  const prefetchDefaultReviews = async (bName: string, cat: string) => {
+    if (prefetchedReviewsRef.current || isPrefetchingRef.current) return;
+    isPrefetchingRef.current = true;
+
+    try {
+      const res = await fetch('/api/generate-reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: bName,
+          rating: 5,
+          category: cat || 'Business',
+        }),
+      });
+
+      const data = await res.json();
+      if (data?.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+        prefetchedReviewsRef.current = data.reviews; // Store in memory silently
+      }
+    } catch (err) {
+      console.warn('Silent prefetch failed:', err);
+    } finally {
+      isPrefetchingRef.current = false;
+    }
+  };
+
+  // AI Reviews Trigger (Optimized with Prefetch Check)
   useEffect(() => {
     if (rating !== null && rating >= 4 && businessData && !isPlanExpired) {
-      generateReviewsAuto(rating, businessData.business_name, businessData.category);
+      // ⚡ AGAR PREFETCHED CACHE PRESENT HAI -> INSTANT DISPLAY (NO DELAY)
+      if (prefetchedReviewsRef.current && prefetchedReviewsRef.current.length > 0) {
+        setReviews(prefetchedReviewsRef.current);
+        logAnalytics('generated', rating);
+        prefetchedReviewsRef.current = null; // Cache consumed, so next tap makes a fresh call
+      } else {
+        // Normal API Call if cache unavailable or consumed
+        generateReviewsAuto(rating, businessData.business_name, businessData.category);
+      }
     }
   }, [rating, businessData, isPlanExpired]);
 
