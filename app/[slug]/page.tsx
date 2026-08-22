@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import BusinessReviewClient from './BusinessReviewClient';
+import ReviewPageClient from './ReviewPageClient';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -12,14 +12,13 @@ interface PageProps {
 export default async function BusinessReviewPage({ params }: PageProps) {
   const { slug } = await params;
 
-  // ⚡ SERVER-SIDE FETCHING (Page render hone se pehle server par hi data fetch hoga)
+  // ⚡ Fast Server-Side Fetching
   const { data } = await supabase
     .from('businesses')
     .select('business_name, category, google_review_url, plan_expiry_date')
     .eq('slug', slug)
     .single();
 
-  // 404 Screen (Agar business na mile)
   if (!data) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
@@ -27,14 +26,14 @@ export default async function BusinessReviewPage({ params }: PageProps) {
           <div className="text-5xl">🔍</div>
           <h1 className="text-2xl font-bold text-red-400">Business Not Found</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
-            The business page <span className="text-amber-400 font-mono">/{slug}</span> does not exist in our database. Please check the URL or contact support.
+            The business page <span className="text-amber-400 font-mono">/{slug}</span> does not exist in our database.
           </p>
         </div>
       </main>
     );
   }
 
-  // Check Subscription Expiry Status
+  // Check Expiry Date
   if (data.plan_expiry_date) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -56,6 +55,5 @@ export default async function BusinessReviewPage({ params }: PageProps) {
     }
   }
 
-  // Direct render without any client-side loading spinner
-  return <BusinessReviewClient slug={slug} businessData={data} />;
+  return <ReviewPageClient slug={slug} businessData={data} />;
 }
