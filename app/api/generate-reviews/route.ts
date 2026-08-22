@@ -33,29 +33,40 @@ function getFallbackReviews(businessName: string): string[] {
 async function getAvailableModel(): Promise<string> {
   if (cachedModelId) return cachedModelId;
 
+  // Strict list of allowed standard text LLM models on Groq
+  const allowedTextModels = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'llama-3.1-70b-versatile',
+    'mixtral-8x7b-32768',
+    'gemma2-9b-it'
+  ];
+
   try {
     const modelsList = await groq.models.list();
     const availableIds = modelsList.data.map((m: any) => m.id);
 
-    // Preferred active production models on Groq
-    const preferredOrder = [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
-      'llama-3.1-70b-versatile',
-      'qwen-2.5-72b',
-      'gemma2-9b-it'
-    ];
-
-    for (const model of preferredOrder) {
+    // 1. Pick first matching preferred text model
+    for (const model of allowedTextModels) {
       if (availableIds.includes(model)) {
         cachedModelId = model;
         return model;
       }
     }
 
-    const dynamicModel = availableIds.find(
-      (id: string) => !id.includes('whisper') && !id.includes('vision') && !id.includes('guard')
-    );
+    // 2. Strict Filter out non-text models (audio, vision, guard, orpheus, tts, etc.)
+    const dynamicModel = availableIds.find((id: string) => {
+      const lower = id.toLowerCase();
+      return (
+        !lower.includes('whisper') &&
+        !lower.includes('vision') &&
+        !lower.includes('guard') &&
+        !lower.includes('orpheus') &&
+        !lower.includes('tts') &&
+        !lower.includes('audio') &&
+        !lower.includes('embed')
+      );
+    });
 
     if (dynamicModel) {
       cachedModelId = dynamicModel;
@@ -65,6 +76,7 @@ async function getAvailableModel(): Promise<string> {
     console.warn('Failed to fetch dynamic model list from Groq:', err);
   }
 
+  // Safe default fallback model
   return 'llama-3.1-8b-instant';
 }
 
@@ -317,7 +329,7 @@ Return ONLY a valid JSON array of 3 strings. Example: ["Review 1...", "Review 2.
     console.error('Groq API / Execution Error, switching to universal fallbacks:', error);
     cachedModelId = null;
 
-    // Rate Limit 429 ya kisi bhi error par client crash nahi hoga, fast 3 universal fallbacks return ho jayenge.
+    // Direct fallback response for Rate Limit / Restricted Model errors
     return NextResponse.json({ reviews: getFallbackReviews(businessName) });
   }
 }
