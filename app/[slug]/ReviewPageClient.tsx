@@ -26,9 +26,9 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  // Prefetch Cache & Promise Refs
-  const prefetchedReviewsRef = useRef<string[] | null>(null);
-  const prefetchPromiseRef = useRef<Promise<string[] | null> | null>(null);
+  // ⚡ Fast Cache Ref for Instant Display
+  const reviewCacheRef = useRef<string[]>([]);
+  const isFetchingBufferRef = useRef<boolean>(false);
 
   // Feedback States
   const [feedbackText, setFeedbackText] = useState('');
@@ -55,78 +55,69 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
       });
   };
 
+  // 🚀 Page load hote hi turant background mein reviews generate/prefetch karna
   useEffect(() => {
     logAnalytics('visited', null);
-    prefetchDefaultReviews(businessData.business_name, businessData.category);
+    fetchAndCacheReviews(businessData.business_name, businessData.category);
   }, [slug]);
 
-  // Silent Background Prefetch
-  const prefetchDefaultReviews = (bName: string, cat: string) => {
-    if (prefetchedReviewsRef.current || prefetchPromiseRef.current) return;
+  // Background API Fetcher
+  const fetchAndCacheReviews = async (bName: string, cat: string) => {
+    if (isFetchingBufferRef.current) return;
+    isFetchingBufferRef.current = true;
 
-    prefetchPromiseRef.current = (async () => {
-      try {
-        const res = await fetch('/api/generate-reviews', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            businessName: bName,
-            rating: 5,
-            category: cat || 'Business',
-          }),
-        });
+    try {
+      const res = await fetch('/api/generate-reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessName: bName,
+          rating: 5,
+          category: cat || 'Business',
+        }),
+      });
 
-        const data = await res.json();
-        if (data?.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
-          prefetchedReviewsRef.current = data.reviews;
-          return data.reviews;
-        }
-      } catch (err) {
-        console.warn('Silent prefetch failed:', err);
-      } finally {
-        prefetchPromiseRef.current = null;
+      const data = await res.json();
+      if (data?.reviews && Array.isArray(data.reviews) && data.reviews.length > 0) {
+        // Cache mein Push/Store kar do
+        reviewCacheRef.current = [...reviewCacheRef.current, ...data.reviews];
       }
-      return null;
-    })();
+    } catch (err) {
+      console.warn('Background prefetch failed:', err);
+    } finally {
+      isFetchingBufferRef.current = false;
+    }
   };
 
-  // Auto-Generate / Fetch Reviews
-  useEffect(() => {
-    if (rating !== null && rating >= 4) {
-      handleHighRatingReviews(rating);
-    }
-  }, [rating]);
+  // ⭐ Star Tap Handler
+  const handleStarClick = async (star: number) => {
+    setRating(star);
+    setFeedbackSubmitted(false);
+    logAnalytics('rated', star);
 
-  const handleHighRatingReviews = async (selectedRating: number) => {
-    // 1. Check if cached
-    if (prefetchedReviewsRef.current && prefetchedReviewsRef.current.length > 0) {
-      setReviews(prefetchedReviewsRef.current);
-      logAnalytics('generated', selectedRating);
-      prefetchedReviewsRef.current = null;
-      return;
-    }
+    if (star >= 4) {
+      playSelectReviewInstruction();
 
-    // 2. Check if prefetch request is currently in-flight
-    if (prefetchPromiseRef.current) {
-      setLoadingReviews(true);
-      const prefetched = await prefetchPromiseRef.current;
-      if (prefetched && prefetched.length > 0) {
-        setReviews(prefetched);
-        logAnalytics('generated', selectedRating);
-        setLoadingReviews(false);
-        prefetchedReviewsRef.current = null;
-        return;
+      // Agar cache mein pehle se reviews tayar hain (Instant Show)
+      if (reviewCacheRef.current.length > 0) {
+        // Pehle 3 reviews utha ke render kar do
+        const currentReviews = reviewCacheRef.current.slice(0, 3);
+        setReviews(currentReviews);
+        // Cache se used reviews hata do
+        reviewCacheRef.current = reviewCacheRef.current.slice(3);
+        logAnalytics('generated', star);
+
+        // 🔄 Agle 3 reviews background me silently ready karo
+        fetchAndCacheReviews(businessData.business_name, businessData.category);
+      } else {
+        // Rare Fallback (Agar initial prefetch complete nahi hua ho)
+        setLoadingReviews(true);
+        await generateReviewsOnDemand(star, businessData.business_name, businessData.category);
       }
     }
-
-    // 3. Fallback to direct API call
-    generateReviewsAuto(selectedRating, businessData.business_name, businessData.category);
   };
 
-  const generateReviewsAuto = async (selectedRating: number, bName: string, cat: string) => {
-    setLoadingReviews(true);
-    setReviews([]);
-
+  const generateReviewsOnDemand = async (selectedRating: number, bName: string, cat: string) => {
     try {
       const res = await fetch('/api/generate-reviews', {
         method: 'POST',
@@ -140,8 +131,11 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
 
       const data = await res.json();
       if (data?.reviews && Array.isArray(data.reviews)) {
-        setReviews(data.reviews);
+        setReviews(data.reviews.slice(0, 3));
         logAnalytics('generated', selectedRating);
+        
+        // Background cache restore
+        fetchAndCacheReviews(bName, cat);
       }
     } catch (err) {
       console.error('Error generating reviews:', err);
@@ -254,13 +248,7 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
                 <button
                   key={star}
                   type="button"
-                  onClick={() => {
-                    if (rating === star) return;
-                    setRating(star);
-                    setFeedbackSubmitted(false);
-                    logAnalytics('rated', star);
-                    if (star >= 4) playSelectReviewInstruction();
-                  }}
+                  onClick={() => handleStarClick(star)}
                   className="p-1.5 transition-transform active:scale-95 focus:outline-none"
                 >
                   <span
@@ -324,7 +312,7 @@ export default function ReviewPageClient({ slug, businessData }: ClientProps) {
             </div>
           )}
 
-          {/* 4-5 STARS LOADING SPINNER */}
+          {/* 4-5 STARS RARE LOADING FALLBACK */}
           {rating !== null && rating >= 4 && loadingReviews && (
             <div className="pt-3 border-t border-slate-800 flex items-center justify-center gap-3 text-amber-400 text-base font-medium">
               <svg className="animate-spin h-6 w-6 text-amber-400" viewBox="0 0 24 24" fill="none">
