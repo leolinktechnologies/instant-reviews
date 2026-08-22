@@ -8,6 +8,28 @@ const groq = new Groq({
 // Cache available model IDs in memory per container runtime
 let cachedModelId: string | null = null;
 
+// 10 Universal Fallback Reviews suitable for ALL business types
+const UNIVERSAL_FALLBACK_REVIEWS = [
+  "Fantastic experience with {BUSINESS_NAME}! The entire process was smooth, highly professional, and stress-free. The team genuinely cares about delivering top-notch quality. Highly recommended!",
+  "Exceptional quality and outstanding customer service at {BUSINESS_NAME}. Everyone was extremely welcoming, knowledgeable, and attentive to every detail. Will definitely be returning!",
+  "I am extremely impressed with the level of service provided by {BUSINESS_NAME}. They exceeded my expectations in every way. Prompt, reliable, and super friendly team!",
+  "Hands down one of the best experiences I've had! {BUSINESS_NAME} operates with absolute honesty and professionalism. You can tell they take true pride in their work. 10/10!",
+  "From start to finish, working with {BUSINESS_NAME} was an absolute pleasure. Great communication, clear guidance, and unmatched quality. Five stars all the way!",
+  "A truly reliable and top-tier establishment! {BUSINESS_NAME} consistently delivers excellence with a warm and friendly attitude. I wouldn't hesitate to recommend them to family and friends.",
+  "Remarkable attention to detail and customer care at {BUSINESS_NAME}. They went above and beyond to ensure everything was handled perfectly. Very satisfied with the result!",
+  "Quick, seamless, and completely hassle-free experience with {BUSINESS_NAME}. The entire staff was courteous and incredibly skilled. So glad I chose them!",
+  "First-class service from a wonderful team at {BUSINESS_NAME}! They answered all my questions patiently and ensured I was 100% satisfied. Truly a standard for excellence.",
+  "Consistently amazing service from {BUSINESS_NAME}! Every single interaction has been pleasant, efficient, and thoroughly professional. Truly deserving of a 5-star rating!"
+];
+
+// Helper function to pick 3 random fallback reviews formatted with business name
+function getFallbackReviews(businessName: string): string[] {
+  const shuffled = [...UNIVERSAL_FALLBACK_REVIEWS].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, 3).map((review) =>
+    review.replace(/{BUSINESS_NAME}/g, businessName || 'this business')
+  );
+}
+
 async function getAvailableModel(): Promise<string> {
   if (cachedModelId) return cachedModelId;
 
@@ -194,12 +216,9 @@ function extractJsonArray(rawText: string): string[] {
 }
 
 export async function POST(req: Request) {
-  try {
-    if (!process.env.GROQ_API_KEY) {
-      console.error('GROQ_API_KEY missing in Environment Variables');
-      return NextResponse.json({ error: 'Groq API Key not configured' }, { status: 500 });
-    }
+  let businessName = 'Business';
 
+  try {
     let body: any = {};
     try {
       body = await req.json();
@@ -207,7 +226,14 @@ export async function POST(req: Request) {
       body = {};
     }
 
-    const { businessName = 'Business', rating = 5, category = 'Business' } = body;
+    businessName = body.businessName || 'Business';
+    const { rating = 5, category = 'Business' } = body;
+
+    if (!process.env.GROQ_API_KEY) {
+      console.warn('GROQ_API_KEY missing in Environment Variables. Using fallback reviews.');
+      return NextResponse.json({ reviews: getFallbackReviews(businessName) });
+    }
+
     const profile = getCategoryProfile(category);
     
     const allCategoryKeywords = [...new Set([...profile.parsedKeywords, ...profile.defaultKeywords])].sort(() => 0.5 - Math.random());
@@ -283,22 +309,15 @@ Return ONLY a valid JSON array of 3 strings. Example: ["Review 1...", "Review 2.
     if (Array.isArray(reviews) && reviews.length > 0) {
       reviews = sanitizeReviewContent(reviews, profile.type);
     } else {
-      reviews = [
-        `I had a smooth experience at ${businessName}. The staff was responsive, guided me properly, and the overall process took less time than expected.`,
-        `Really happy with the service provided here. Everything was handled professionally and they answered all my queries without any hassle.`,
-        `Visited recently for assistance and was impressed by their quick turnaround time. Clean environment and supportive team overall.`
-      ];
+      reviews = getFallbackReviews(businessName);
     }
 
     return NextResponse.json({ reviews });
   } catch (error: unknown) {
-    console.error('Groq API Error:', error);
+    console.error('Groq API / Execution Error, switching to universal fallbacks:', error);
     cachedModelId = null;
 
-    const errorMsg = error instanceof Error ? error.message : 'Failed to generate reviews via Groq';
-    return NextResponse.json(
-      { error: errorMsg },
-      { status: 500 }
-    );
+    // Rate Limit 429 ya kisi bhi error par client crash nahi hoga, fast 3 universal fallbacks return ho jayenge.
+    return NextResponse.json({ reviews: getFallbackReviews(businessName) });
   }
 }
